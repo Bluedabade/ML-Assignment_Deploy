@@ -1,0 +1,13 @@
+[server]
+maxUploadSize = 20
+maxMessageSize = 50
+enableXsrfProtection = true
+enableCORS = true
+enableStaticServing = false
+fileWatcherType = "none"
+
+[client]
+showErrorDetails = false
+
+[browser]
+gatherUsageStats = false

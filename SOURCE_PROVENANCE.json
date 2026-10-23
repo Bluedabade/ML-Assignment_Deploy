@@ -1,0 +1,31 @@
+{
+  "original_repository": "https://github.com/Bluedabade/ML-Assignment.git",
+  "original_HEAD": "7def2824b071da53712bcf15b690ef7acf1689e8",
+  "source_bundle_manifest_sha256": "11d7647e014d115474ceb8db3fd4cc345b20acd8477b50b85daebb577f876773",
+  "verified_source_sha256": {
+    "streamlit_app.py": "65b39b420cfecdaa1b5d6cee3f6d2b4bd3855ee1d9b19b29ad01a07681e4255c",
+    "packages.txt": "b99c22e546393e80f21a7b2cee01faceb53ad13b64fdf9f373b1c560b98cc074",
+    ".streamlit/config.toml": "1bf0cc440e60c084443324f0b1abb35355534d79370444e8458558f53ecdeef9",
+    "DEPLOY_STREAMLIT_CLOUD.md": "8762073654e42d4303b1b59ce58607e24f4a9d38c923bd937cce015d2db79d7c",
+    "deployment/streamlit_app.py": "bb7d9c58ff97464252f0a35e33205daa140d42e82f36b462eaa213ef30bb6940",
+    "deployment/requirements.txt": "c8291abec1d5b4d583196146bff8d26e9280b38114675b3255fbc08fcff40c7f",
+    "deployment/secrets.example.toml": "88dd93424a892871b104940ba16209c6940c7fcc73256282de670d5e8aa180be",
+    "deployment/.env.example": "be04b498a7b4add9c1e75a1129b6df0cd649c4a6ff685066b3b676534412e9be",
+    "deployment/dependency_audit.py": "fd655a60e2b2fddc25c0e52cb7262044ab3b2476ff76e09a67afe944cc89b421",
+    "skn_app/__init__.py": "85791620d1e68c2a014ac43408442c62f3c16513485cc03697a60313569ae1d6",
+    "skn_app/cloud_adapter.py": "8d7fb0bf200f4a8b373db6b7449c11c600a7f2baeab8942c4300d4b530793558",
+    "skn_app/config.py": "4abaacc951434911fa613827a16db04c4253242187347f0d3f7d49e375f1f509",
+    "skn_app/errors.py": "094248c32128ef9d949a14d5e97722d4f92dd9ac6fb912434f844a38ac3f20c1",
+    "skn_app/local_adapter.py": "abf8d04ca4647ff1aebbb6d7c98017b600cac61e54ed39c3c323884b78bde8e3",
+    "skn_app/media.py": "7a66a78de2e5195182c5aa77af4aabd328601e256a348579224fe2b568b326b2",
+    "skn_app/resources.py": "a4ced71e177004f3e693476e24babd5e707b0bb7ff50b1c690fecb63b9f079ea",
+    "skn_app/runtime.py": "57efc302c37c745acad324b572dc5a66e2dd8741ebbd1c9d179e9187575f03cd",
+    "skn_app/secrets.py": "8c90c2c3266e2e627e03af0fa7a3feaf8b220f2ff5234483cb49262d012cac74",
+    "skn_app/ui.py": "f4c962cde4b76ddedf60ce12364d585cefb73f899a38edea6b87f7c30fa69e3b",
+    "skn_app/worker.py": "3ccea8a84c1c92379f8730538eae8b2b324a813496e3822e1a91c8cc856125af"
+  },
+  "synthetic_tests_source_sha256": "2e90a42dd2589764f011a272143929cf66140998ab374bd331336d3e50eaa411",
+  "license_status": "LICENSE_UNVERIFIED",
+  "copied_git_history": false,
+  "copied_model_weights": false
+}
