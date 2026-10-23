@@ -11,7 +11,9 @@ MIB = 1024**2
 def memory_snapshot():
     candidates = []
     details = {'host_available_bytes': None, 'cgroup_limit_bytes': None,
-               'cgroup_used_bytes': None, 'process_rss_bytes': None}
+               'cgroup_used_bytes': None, 'process_rss_bytes': None,
+               'cgroup_inactive_file_bytes': None, 'cgroup_dirty_file_bytes': None,
+               'cgroup_writeback_bytes': None}
     if sys.platform == 'win32':
         import ctypes
         class Memory(ctypes.Structure):
@@ -38,6 +40,15 @@ def memory_snapshot():
                         candidates.append(max(0, limit-used))
                         if details['cgroup_limit_bytes'] is None or limit < details['cgroup_limit_bytes']:
                             details.update(cgroup_limit_bytes=limit, cgroup_used_bytes=used)
+                            try:
+                                stat_path = Path(current).parent/'memory.stat'
+                                stat = dict(line.split() for line in stat_path.read_text().splitlines())
+                                prefix = '' if maximum.endswith('memory.max') else 'total_'
+                                details.update(cgroup_inactive_file_bytes=int(stat.get(prefix+'inactive_file','0')),
+                                    cgroup_dirty_file_bytes=int(stat.get('file_dirty' if not prefix else 'total_dirty','0')),
+                                    cgroup_writeback_bytes=int(stat.get('file_writeback' if not prefix else 'total_writeback','0')))
+                            except (OSError, ValueError):
+                                pass
             except (OSError, ValueError):
                 pass
         try:
