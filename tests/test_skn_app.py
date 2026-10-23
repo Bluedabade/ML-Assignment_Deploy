@@ -86,11 +86,14 @@ class AppTests(unittest.TestCase):
                 self.assertEqual(authentication('local'),'dummy-local')
             self.assertEqual(file.read_bytes(),before);self.assertEqual(captured.getvalue(),'')
 
-    def test_memory_budgets_and_unknown_resource(self):
-        for value in (None,0,100*1024**2):
+    def test_memory_telemetry_does_not_block_unknown_or_low_resources(self):
+        for value in (None,0,100*1024**2,800*1024**2):
             with patch('skn_app.resources.available_memory',return_value=value):
-                with self.assertRaises(AppError):guard_memory(cold=True)
-        with patch('skn_app.resources.available_memory',return_value=800*1024**2):guard_memory(cold=True)
+                for options in ({'cold':True},{'video':True},{}):
+                    result=guard_memory(**options)
+                    self.assertEqual(result['available_bytes'],value)
+                    self.assertEqual(result['required_bytes'],0)
+                    self.assertFalse(result['enforced'])
 
     def test_linux_cgroup_limit_overrides_host_available(self):
         files={'/proc/meminfo':'MemAvailable: 8000000 kB\n','/sys/fs/cgroup/memory.max':'1073741824',

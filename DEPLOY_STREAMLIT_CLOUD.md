@@ -56,9 +56,9 @@ Precision-focused มี Recall tradeoff โดยเฉพาะ wrinkle ไม
 
 ## Memory และ Concurrency
 
-ไม่ใช้เกณฑ์2GiBจาก Evaluation โดยตรง App ตรวจ Host available memory และ cgroup v1/v2 แล้วใช้ค่าต่ำสุด Cold reserve768MiB อ้างอิง SKN process peak ที่วัดได้ประมาณ557–597MiB พร้อม Headroom; Warm image128MiB / Video192MiB สำหรับ Media scratch ที่จำกัดขนาดไว้ ตัวเลขเป็น Budget ไม่ใช่การรับรอง Linux peak จะเท่ากับ Windows
+ผู้ใช้อนุญาตให้ปิด Application RAM admission guard สำหรับ Cloud demo แล้ว ไม่มีการปฏิเสธงานจากเกณฑ์768/128/192MiBเดิม ฟังก์ชันยังอ่าน Host/cgroup telemetry โดยไม่แก้ระบบ ขีดจำกัด cgroup ของ Hosting ยังบังคับใช้และอาจทำให้ Process ถูกปิดหากใช้เกิน ไม่ถือว่าการปิด Guard เป็นการเพิ่ม RAM หรือรับรองว่าจะไม่ OOM
 
-หากอ่าน Resource budget ไม่ได้หรือไม่พอ ให้แสดง Resource-limited state ไม่ฝืนโหลด ไม่ติดตั้ง Package และไม่ส่งไป Remote inference API Concurrent job ที่สองได้รับ BUSY ไม่มี Queue ของ Workers จำนวนมาก Cloud Video ต้องผ่าน Image inference จริงใน Session ก่อน และยังต้องผ่าน Memory guard อีกครั้ง
+Concurrent job ที่สองได้รับ BUSY ไม่มี Queue ของ Workers จำนวนมาก Cloud Video ต้องผ่าน Image inference จริงใน Session ก่อน คง Upload/Video/เวลาและDetection caps เดิม Runtime/Memory expander แสดงข้อมูลตัวเลขที่ไม่มีSecretsเพื่อทดสอบ Cloud จริงก่อนส่งงาน ไม่ติดตั้ง Package หรือส่ง Media ไป Remote inference API เพื่อหลบข้อจำกัด
 
 ## Secret configuration
 
@@ -143,7 +143,7 @@ Destination ต้องยังไม่มีอยู่และ Parent ต
 - pyvips/native library error: ตรวจ packages.txt/Build logsและLinux dependency closure อย่าลบDependenciesหรือบังคับ--no-depsเพื่อให้ผ่าน
 - Auth/Package access: ตรวจSecretในCloud UI, Model IDและสิทธิ์ แล้ว Reboot App ไม่ Print Key/Raw exception
 - Missing cache หลังRestart: เป็นพฤติกรรมที่รองรับ ให้SDKProvisionใหม่ ไม่คาดหวังPersistent disk
-- RESOURCE_LIMITED: ลดขนาดMedia/จำนวนผู้ใช้หรือเปลี่ยนHostingตามการอนุมัติ อย่าลดMemory guardแบบไม่มีผลวัด
+- Resource failure/OOM: ตรวจ Memory telemetry ลดขนาดMedia/จำนวนผู้ใช้หรือเปลี่ยนHostingตามการอนุมัติ Guard ของแอปปิดตามคำสั่งผู้ใช้แล้ว แต่ Platform memory limit ไม่ได้เพิ่ม
 - วิดีโอเปิดไม่ได้: ตรวจ H.264/yuv420p จากExportจริง ไม่ใช้MP4Vแทนแล้วเรียกว่ารองรับBrowser
 - อัปเดต: ตรวจDiff/Testsก่อนให้ผู้ใช้Commit/Push CloudจะRebuildเมื่อSource/Dependenciesเปลี่ยน ตรวจImageก่อนVideoซ้ำหลังDeployทุกครั้ง
 - Rollback: จดCommitที่ผ่านและSettingsไว้ ให้ผู้ใช้สร้างRevert commitของApp changesบนDeploy repo ไม่ใช้Reset/Cleanกับโปรเจกต์งานเดิม แล้วทดสอบใหม่

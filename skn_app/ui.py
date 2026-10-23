@@ -67,10 +67,11 @@ def main():
                 snapshot = memory_snapshot()
                 runtime = service(environment).runtime if environment == 'cloud' else None
                 cold = runtime is not None and runtime.model is None
-                required = 768 if cold else (192 if kind == 'video' else 128)
+                required = 0
                 diagnostics = {name.removesuffix('_bytes')+'_MiB':
                     (round(value/MIB, 1) if value is not None else None) for name,value in snapshot.items()}
                 diagnostics.update(required_available_MiB=required,
+                    memory_guard_enforced=False,
                     stage='before_model_loading' if cold else 'before_inference',
                     model_constructor_calls=runtime.model_loads if runtime is not None else None)
                 st.caption('ข้อมูลหน่วยความจำสำหรับตรวจสอบข้อจำกัด Cloud — ไม่ใช่การเพิ่ม RAM')
@@ -92,3 +93,10 @@ def main():
     st.dataframe(result['predictions'], hide_index=True)
     st.download_button('ดาวน์โหลด CSV', result['csv_bytes'], 'skn_detections.csv', 'text/csv')
     st.caption(f"Inference รวม {result['inference_seconds']:.2f} วินาที · {result['backend']}")
+    with st.expander('Runtime / Memory'):
+        snapshot = memory_snapshot()
+        diagnostics = {name.removesuffix('_bytes')+'_MiB':
+            (round(value/MIB, 1) if value is not None else None) for name,value in snapshot.items()}
+        diagnostics.update(memory_guard_enforced=False, model_loads=result.get('model_loads'),
+            model_load_seconds=result.get('model_load_seconds'))
+        st.json(diagnostics)

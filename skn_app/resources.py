@@ -1,9 +1,7 @@
-"""Host/cgroup-aware guards calibrated from measured ~557–597MiB SKN process peaks."""
+"""Read-only host/cgroup telemetry; application RAM admission limits are disabled."""
 import os
 from pathlib import Path
 import sys
-
-from .errors import AppError
 
 MIB = 1024**2
 
@@ -64,12 +62,6 @@ def available_memory():
 
 
 def guard_memory(cold=False, video=False):
-    # Cold: measured native peak plus ~170MiB headroom. Warm: bounded media scratch.
-    # These are application budgets, not the unrelated 2GiB evaluation gate.
-    required = (768 if cold else (192 if video else 128))*MIB
-    available = available_memory()
-    if available is None:
-        raise AppError('RESOURCE_UNKNOWN')
-    if available < required:
-        raise AppError('RESOURCE_LIMITED')
-    return {'available_bytes': available, 'required_bytes': required}
+    # User-authorized Cloud demo policy: observe RAM without rejecting a job.
+    # The hosting provider's cgroup limit still applies and may terminate the process.
+    return {'available_bytes': available_memory(), 'required_bytes': 0, 'enforced': False}
