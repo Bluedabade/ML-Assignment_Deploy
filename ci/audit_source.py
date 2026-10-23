@@ -32,6 +32,7 @@ skn_app/resources.py
 skn_app/runtime.py
 skn_app/secrets.py
 skn_app/ui.py
+skn_app/skincare_guidance.py
 skn_app/worker.py
 ci/__init__.py
 ci/audit_source.py
@@ -41,6 +42,7 @@ ci/safety.py
 ci/startup_smoke.py
 tests/test_skn_app.py
 tests/test_ci_safety.py
+tests/test_skincare_guidance.py
 docs/LICENSING.md
 docs/LICENSE_PERMISSION_REQUEST.md
 '''.split())

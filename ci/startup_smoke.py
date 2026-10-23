@@ -61,6 +61,26 @@ results_view(result,'image')
         rendered.button[0].click().run()
         if rendered.session_state['upload_generation'] != 1:
             raise RuntimeError('CLEAR_SESSION_FAILED')
+        from skn_app.skincare_guidance import (MEDICAL_DISCLAIMER, NUTRITION_DISCLAIMER,
+            NO_DETECTION_MESSAGE, SKINCARE_GUIDANCE)
+        from skn_app import ui
+        with patch.object(ui, 'service', side_effect=forbid_model) as adapter:
+            for counts, showcase in [({'acne':1},False), ({'wrinkle':1},False),
+                    ({'dark_spot':1},False), ({'enlarged_pore':1},False),
+                    (dict.fromkeys(THAI,1),False), ({},False), ({'unknown':1},False), ({},True)]:
+                code = ('from skn_app.ui import skincare_guidance_view\n'
+                        f'skincare_guidance_view({counts!r}, showcase={showcase!r})')
+                view = AppTest.from_string(code).run()
+                if view.exception:raise RuntimeError('GUIDANCE_RENDER_FAILED')
+                text = '\n'.join(str(node.value) for kind in ('info','caption','markdown','subheader') for node in view.get(kind))
+                if MEDICAL_DISCLAIMER not in text or NUTRITION_DISCLAIMER not in text:
+                    raise RuntimeError('GUIDANCE_DISCLAIMER_MISSING')
+                if not counts and not showcase and NO_DETECTION_MESSAGE not in text:
+                    raise RuntimeError('GUIDANCE_EMPTY_STATE_FAILED')
+                if showcase:
+                    if 'ข้อมูลสาธิตเท่านั้น' not in text or SKINCARE_GUIDANCE['acne']['description'] in text:
+                        raise RuntimeError('SHOWCASE_CLAIMS_REAL_DETECTION')
+            adapter.assert_not_called()
         loader.assert_not_called()
     if any(n == 'inference_models' or n.startswith('inference_models.') for n in sys.modules):
         raise RuntimeError('SDK_IMPORTED_DURING_INITIAL_UI')
@@ -93,7 +113,7 @@ results_view(result,'image')
         except subprocess.TimeoutExpired:process.kill();process.wait(timeout=5)
     return {'status': 'STREAMLIT_STARTUP_PASSED', 'initial_ui_rendered': True, 'thai_pages_checked': 6, 'hero_navigation': True,
             'localhost_health_passed': True, 'sdk_imported': False, 'model_load_calls': 0,
-            'cloud_inference_verified': False}
+            'guidance_cases_checked': 8, 'cloud_inference_verified': False}
 
 
 if __name__ == '__main__':

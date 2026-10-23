@@ -5,6 +5,9 @@ import streamlit as st
 from .config import CLASSES, LIMITS, PROFILES, mode
 from .errors import AppError, MESSAGES
 from .media import COLORS, decode_image
+from .skincare_guidance import (SKINCARE_GUIDANCE, GENERAL_CARE, NUTRIENTS,
+    NUTRITION_REFERENCES, MEDICAL_DISCLAIMER, NUTRITION_DISCLAIMER,
+    INGREDIENT_CAUTION, NO_DETECTION_MESSAGE, guidance_topics)
 
 PAGES = ('หน้าหลัก', 'ตรวจจับจากภาพ', 'ตรวจจับจากวิดีโอ', 'ผลการทดสอบโมเดล', 'เกี่ยวกับโครงงาน', 'คำแนะนำการใช้งาน')
 THAI = dict(zip(CLASSES, ('สิว', 'ริ้วรอย', 'จุดด่างดำ', 'รูขุมขนกว้าง')))
@@ -18,7 +21,7 @@ CSS = '''
 :root {--navy:#16324F;--teal:#0D9488;--surface:#fff;--ink:#1F2937;--muted:#536579;--line:#dce5ef;--canvas:#F5F8FC}
 @media(prefers-color-scheme:dark){:root{--surface:#152638;--ink:#edf4fc;--muted:#bac9da;--line:#334b63;--canvas:#0d1927;--teal:#5eead4}}
 .stApp {font-family:'Noto Sans Thai','Prompt','Tahoma',sans-serif;background:var(--canvas);color:var(--ink)}
-h1,h2,h3,p,button,label,input,select,textarea {font-family:'Noto Sans Thai','Prompt','Tahoma',sans-serif!important}
+h1,h2,h3,h4,p,li,button,label,input,select,textarea {font-family:'Noto Sans Thai','Prompt','Tahoma',sans-serif!important}
 h1,h2,h3 {color:inherit}
 h1{font-size:clamp(1.65rem,3vw,2.65rem)!important;line-height:1.45!important;letter-spacing:-.02em}
 h2{font-size:1.5rem!important} h3{font-size:1.15rem!important}
@@ -44,6 +47,11 @@ button{border-radius:12px!important;transition:box-shadow .15s}button:hover{box-
 [data-testid="stMetric"]{color:var(--ink)}
 [data-testid="stMetricLabel"],[data-testid="stMetricValue"]{color:var(--ink)}
 [data-testid="stImage"] img{border-radius:14px}
+.st-key-skincare-guidance{color:var(--ink)}
+.st-key-skincare-guidance p,.st-key-skincare-guidance h4{color:var(--ink)}
+.st-key-skincare-guidance [data-testid="stExpander"] details,.st-key-skincare-guidance summary{background:var(--surface);color:var(--ink);border-radius:12px}
+.st-key-skincare-guidance [data-testid="stAlertContainer"]{background:var(--surface);color:var(--ink);border:1px solid var(--teal)}
+.st-key-skincare-guidance a{color:var(--ink);text-decoration:underline}
 @media(max-width:640px){.block-container{padding:1.2rem 1rem}.hero{padding:1.25rem}.card{min-height:unset}h1{font-size:1.65rem!important}}
 </style>
 '''
@@ -144,6 +152,53 @@ def help_page():
     st.info(DISCLAIMER)
 
 
+def skincare_guidance_view(counts, *, showcase=False):
+    """Static presentation only. Never calls service, SDK, or an external API."""
+    with st.container(key='skincare-guidance'):
+        _skincare_guidance_content(counts, showcase=showcase)
+
+
+def _skincare_guidance_content(counts, *, showcase=False):
+    st.subheader('ตัวอย่างคำแนะนำที่ระบบสามารถแสดงได้' if showcase else 'คำแนะนำการดูแลผิวเบื้องต้น')
+    if showcase:
+        st.caption('ข้อมูลสาธิตเท่านั้น ไม่ใช่ผลวิเคราะห์ภาพจริง และไม่ได้สร้างผลตรวจจับ')
+    else:
+        st.caption('เลือกหัวข้อความรู้ตามประเภทที่ตรวจพบ ไม่ได้ปรับการรักษาหรือประเมินความรุนแรงจากจำนวนตำแหน่ง')
+    st.info(MEDICAL_DISCLAIMER)
+    topics = guidance_topics(counts, showcase=showcase)
+    if not topics:
+        st.write(NO_DETECTION_MESSAGE)
+        with st.container(border=True):
+            st.markdown('#### การดูแลผิวทั่วไป')
+            for line in GENERAL_CARE:st.markdown(f'- {line}')
+    else:
+        st.caption(INGREDIENT_CAUTION)
+        if len(topics) > 1:st.caption('ตรวจพบหลายประเภทไม่ได้หมายความว่ามีโรคหลายชนิด และไม่ควรนำสารทุกชนิดด้านล่างมาใช้พร้อมกัน')
+        sections = (('daily_care', 'การดูแลผิวหน้า'),
+                    ('skincare_ingredients', 'ผลิตภัณฑ์และสารบำรุงที่ควรรู้จัก'),
+                    ('nutrition', 'อาหารและสารอาหาร'),
+                    ('exercise_lifestyle', 'การออกกำลังกายและการใช้ชีวิต'),
+                    ('cautions', 'ข้อควรระวัง'),
+                    ('when_to_seek_professional_care', 'เมื่อควรปรึกษาผู้เชี่ยวชาญ'))
+        for name in topics:
+            guidance = SKINCARE_GUIDANCE[name]
+            with st.expander(guidance['title_th'], expanded=len(topics) == 1):
+                st.write('ตัวอย่างข้อมูลความรู้สำหรับประเภทนี้' if showcase else guidance['description'])
+                for key, title in sections:
+                    st.markdown(f'#### {title}')
+                    for line in guidance[key]:st.markdown(f'- {line}')
+                st.markdown('**อ่านข้อมูลเพิ่มเติมจากแหล่งอ้างอิง**')
+                for title, url in guidance['references']:st.markdown(f'- [{title}]({url})')
+    # Shared once, rather than repeated as a supposed treatment for each detected class.
+    st.caption(NUTRITION_DISCLAIMER)
+    with st.expander('สารอาหารที่มีส่วนช่วยดูแลสุขภาพผิว'):
+        st.write('ตัวอย่างอาหารสำหรับโภชนาการทั่วไป เลือกให้เหมาะกับข้อจำกัดด้านสุขภาพและการแพ้อาหารของตนเอง ไม่ใช่คำแนะนำให้ซื้ออาหารเสริม')
+        for nutrient, text in NUTRIENTS:st.markdown(f'- **{nutrient}**: {text}')
+        st.caption('อาหารไม่ใช่สิ่งที่รับประกันว่าจะรักษาลักษณะผิวที่ตรวจพบได้ และระบบไม่แนะนำขนาดวิตามินหรือยาเฉพาะบุคคล')
+        st.markdown('**อ่านข้อมูลเพิ่มเติมจากแหล่งอ้างอิง**')
+        for title, url in NUTRITION_REFERENCES:st.markdown(f'- [{title}]({url})')
+
+
 def results_view(result, kind):
     st.subheader('ผลการตรวจจับ')
     st.success('ประมวลผลสำเร็จ')
@@ -160,6 +215,7 @@ def results_view(result, kind):
         st.dataframe(display_rows(result['frames']), hide_index=True, width='stretch')
         st.caption(f"เวลาประมวลผลวิดีโอรวม {result.get('processing_seconds', 0):.2f} วินาที")
         st.download_button('ดาวน์โหลดวิดีโอผลลัพธ์', result['video_bytes'], 'skn_sampled.mp4', 'video/mp4', width='stretch')
+    skincare_guidance_view(result['counts'])
     if result['predictions']:
         st.dataframe(display_rows(result['predictions']), hide_index=True, width='stretch')
     st.download_button('ดาวน์โหลดข้อมูล CSV', result['csv_bytes'], 'skn_detections.csv', 'text/csv', width='stretch')
