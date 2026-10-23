@@ -1,11 +1,52 @@
-"""One UI shared by the original local entrypoint and the cloud dependency wrapper."""
+"""Thai presentation layer shared by local and cloud; inference stays in adapters."""
 import hashlib
 import time
 import streamlit as st
 from .config import CLASSES, LIMITS, PROFILES, mode
 from .errors import AppError, MESSAGES
-from .media import decode_image
-from .resources import memory_snapshot, MIB
+from .media import COLORS, decode_image
+
+PAGES = ('หน้าหลัก', 'ตรวจจับจากภาพ', 'ตรวจจับจากวิดีโอ', 'ผลการทดสอบโมเดล', 'เกี่ยวกับโครงงาน', 'คำแนะนำการใช้งาน')
+THAI = dict(zip(CLASSES, ('สิว', 'ริ้วรอย', 'จุดด่างดำ', 'รูขุมขนกว้าง')))
+PROFILE_LABELS = {'Balanced': 'สมดุล', 'Precision-focused': 'เน้นความแม่นยำของผลที่แสดง'}
+DISCLAIMER = 'ระบบนี้เป็นเครื่องมือสาธิตด้านการเรียนรู้ของเครื่อง ไม่ใช่เครื่องมือวินิจฉัยโรคหรือประเมินสุขภาพผิวทางการแพทย์'
+COLUMNS = {'class_name': 'ประเภท', 'confidence': 'ความเชื่อมั่น', 'timestamp_seconds': 'เวลาในวิดีโอ (วินาที)',
+           'detections': 'จำนวนตำแหน่ง', 'x1': 'พิกัดซ้าย', 'y1': 'พิกัดบน', 'x2': 'พิกัดขวา', 'y2': 'พิกัดล่าง'}
+CSS = '''
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&display=swap');
+:root {--navy:#16324F;--teal:#0D9488;--surface:#fff;--ink:#1F2937;--muted:#536579;--line:#dce5ef;--canvas:#F5F8FC}
+@media(prefers-color-scheme:dark){:root{--surface:#152638;--ink:#edf4fc;--muted:#bac9da;--line:#334b63;--canvas:#0d1927;--teal:#5eead4}}
+.stApp {font-family:'Noto Sans Thai','Prompt','Tahoma',sans-serif;background:var(--canvas);color:var(--ink)}
+h1,h2,h3,p,button,label,input,select,textarea {font-family:'Noto Sans Thai','Prompt','Tahoma',sans-serif!important}
+h1,h2,h3 {color:inherit}
+h1{font-size:clamp(1.65rem,3vw,2.65rem)!important;line-height:1.45!important;letter-spacing:-.02em}
+h2{font-size:1.5rem!important} h3{font-size:1.15rem!important}
+.block-container{max-width:1280px;padding-top:2.5rem;padding-bottom:3rem}
+.hero{background:linear-gradient(120deg,#16324F,#125b68);color:white;padding:2rem;border-radius:24px;margin:1rem 0}
+.hero p{color:#dcebf5;max-width:760px;line-height:1.9}.eyebrow{letter-spacing:.06em;font-size:.8rem;color:#8de6db}
+.hero h2{font-size:clamp(1.5rem,3vw,2.2rem)!important;color:white;line-height:1.6}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:1.35rem;min-height:180px;box-shadow:0 6px 24px #16324f08;margin-bottom:1rem}
+.card p{color:var(--muted);line-height:1.8}.card small{color:var(--muted)}.badge{display:inline-block;background:#0d948820;color:var(--teal);border-radius:20px;padding:.25rem .75rem;font-size:.85rem}
+.empty{text-align:center;padding:3rem 1rem;border:2px dashed var(--line);border-radius:20px;color:var(--muted);margin:1rem 0}
+.legend{display:flex;flex-wrap:wrap;gap:1rem;font-size:.9rem;margin:1rem 0}.dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:.4rem}
+button{border-radius:12px!important;transition:box-shadow .15s}button:hover{box-shadow:0 3px 12px #0d948826}button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #0D9488!important;outline-offset:3px}
+[data-testid="stBaseButton-primary"]{background:#16324F;border-color:#16324F;color:white}
+[data-testid="stMetric"]{background:var(--surface);border:1px solid var(--line);padding:1rem;border-radius:16px}
+[data-testid="stSidebar"]{border-right:1px solid var(--line);background:var(--surface);color:var(--ink)}
+[data-testid="stSidebar"] p,[data-testid="stRadio"] p,[data-testid="stWidgetLabel"] p{color:var(--ink)}
+[data-testid="stSidebar"] a{color:var(--teal)}
+[data-testid="stHeader"]{background:var(--surface);color:var(--ink)}
+[data-testid="stHeader"] button,[data-testid="stSidebar"] button{color:var(--ink)}
+[data-testid="stBaseButton-secondary"],[data-testid="stBaseButton-secondaryFormSubmit"]{background:var(--surface);color:var(--ink);border-color:var(--line)}
+[data-testid="stFileUploaderDropzone"]{background:var(--surface);color:var(--ink);border:1px dashed var(--line)}
+[data-testid="stFileUploaderDropzone"] small{color:var(--muted)}
+[data-testid="stMetric"]{color:var(--ink)}
+[data-testid="stMetricLabel"],[data-testid="stMetricValue"]{color:var(--ink)}
+[data-testid="stImage"] img{border-radius:14px}
+@media(max-width:640px){.block-container{padding:1.2rem 1rem}.hero{padding:1.25rem}.card{min-height:unset}h1{font-size:1.65rem!important}}
+</style>
+'''
 
 
 @st.cache_resource(max_entries=1, show_spinner=False)
@@ -17,86 +58,185 @@ def service(environment):
     return CloudAdapter(lambda name: st.secrets[name])
 
 
-def main():
-    st.set_page_config(page_title='SKN-1 Skin Detection', page_icon='🔎', layout='wide')
-    environment = mode()
-    st.title('Skin Problem Detection · SKN-1')
-    st.caption('ระบบช่วยตรวจจับจากภาพสำหรับโครงงาน Machine Learning ไม่ใช่การวินิจฉัยทางการแพทย์')
-    st.info('ไม่พบ Detection ไม่ได้หมายความว่าผิวปกติ ระบบตรวจเฉพาะ acne, wrinkle, dark_spot และ enlarged_pore')
-    with st.sidebar:
-        st.header('การตรวจจับ')
-        profile = st.selectbox('Confidence profile', list(PROFILES))
-        st.caption('Balanced ใช้ 0.25 ทุกคลาส ส่วน Precision-focused ลดกล่อง Confidence ต่ำและอาจตรวจพบริ้วรอยน้อยลง')
-        st.write('Full image · ONNX CPU · SKN-1')
-        st.caption('รูปและวิดีโอประมวลผลใน Runtime ของแอป ไม่ส่ง Media ไป Remote inference API')
-        if st.button('ล้างไฟล์และผลลัพธ์ใน Session'):
-            for key in ('result', 'signature', 'result_time', 'image_verified'):st.session_state.pop(key, None)
-            st.session_state['upload_generation'] = st.session_state.get('upload_generation', 0)+1
-        st.markdown('[Model: SKN](https://universe.roboflow.com/skn-f1vaw/skn-1) · [License information](https://github.com/Deci-AI/super-gradients/blob/master/LICENSE.YOLONAS.md)')
-    if time.time()-st.session_state.get('result_time', 0) > LIMITS.result_ttl_seconds:
-        st.session_state.pop('result', None);st.session_state.pop('signature', None)
-    kind = st.radio('ชนิดไฟล์', ['Image', 'Video'], horizontal=True).lower()
-    st.caption('JPG/JPEG/PNG · ไม่เกิน 5 MiB และ 4 megapixels' if kind == 'image' else
-        'MP4 · ไม่เกิน 20 MiB / 12 วินาที / 1280 พิกเซลด้านยาว · ตรวจตัวอย่าง 1 เฟรมต่อวินาที ไม่ใช่ Real-time')
-    uploaded = st.file_uploader('อัปโหลดไฟล์', type=['jpg', 'jpeg', 'png'] if kind == 'image' else ['mp4'],
-        key=f"upload-{kind}-{st.session_state.get('upload_generation',0)}")
-    if uploaded is None:
-        st.caption('ใช้เฉพาะภาพหรือวิดีโอที่คุณมีสิทธิ์และได้รับความยินยอมให้นำมาทดลอง');return
-    if uploaded.size > (LIMITS.image_bytes if kind == 'image' else LIMITS.video_bytes):
-        st.error(MESSAGES['UPLOAD_TOO_LARGE']);return
-    data = uploaded.getvalue();signature = (kind, hashlib.sha256(data).hexdigest(), profile)
-    if st.session_state.get('signature') != signature:st.session_state.pop('result', None)
+def navigate(page):
+    st.session_state['navigation'] = page
+
+
+def clear_media():
+    for key in ('result', 'signature', 'result_time', 'image_verified'):
+        st.session_state.pop(key, None)
+    st.session_state['upload_generation'] = st.session_state.get('upload_generation', 0)+1
+
+
+def display_rows(rows):
+    """Translate a copy for display; exported CSV and result schemas stay untouched."""
+    return [{COLUMNS.get(k, k): (THAI.get(v, 'ไม่พบตำแหน่ง') if k == 'class_name' else
+            (f'{v:.1%}' if k == 'confidence' and isinstance(v, (float, int)) else v))
+            for k, v in row.items()} for row in rows]
+
+
+def legend():
+    st.markdown('<div class="legend">'+''.join(f'<span><i class="dot" style="background:{COLORS[c]}"></i>{THAI[c]}</span>' for c in CLASSES)+'</div>', unsafe_allow_html=True)
+
+
+def home():
+    st.markdown('''<section class="hero"><div class="eyebrow">โครงงานการเรียนรู้ของเครื่อง · SKN-1 (YOLO-NAS)</div>
+    <h2>เข้าใจผลการตรวจจับ<br>ผ่านภาพและวิดีโอของคุณ</h2>
+    <p>ระบบต้นแบบสำหรับตรวจจับลักษณะปัญหาผิวจากภาพและวิดีโอ โดยใช้เทคโนโลยี Machine Learning</p>
+    <p>ตรวจจับ 4 ประเภท · ประมวลผลในระบบแอป · แสดงตำแหน่งที่ตรวจพบ</p></section>''', unsafe_allow_html=True)
+    for col, label, page in zip(st.columns(3), ('เริ่มตรวจจับจากภาพ', 'ดูผลการทดสอบ', 'วิธีใช้งาน'), (PAGES[1], PAGES[3], PAGES[5])):
+        col.button(label, on_click=navigate, args=(page,), width='stretch', type='primary' if page == PAGES[1] else 'secondary')
+    st.subheader('ลักษณะปัญหาผิวที่ระบบตรวจจับ')
+    descriptions = ('ตำแหน่งลักษณะสิวที่โมเดลตรวจพบจากภาพ', 'แนวเส้นริ้วรอยที่มองเห็นบนผิวหน้า', 'จุดหรือปื้นสีเข้มที่โมเดลตรวจพบ', 'บริเวณลักษณะรูขุมขนกว้างที่มองเห็น')
+    for col, name, icon, description in zip(st.columns(4), CLASSES, ('◉', '≋', '◈', '⠿'), descriptions):
+        with col:
+            st.markdown(f'<div class="card"><span style="font-size:1.8rem;color:{COLORS[name]}">{icon}</span><h3>{THAI[name]}</h3><small>{name}</small><p>{description}</p></div>', unsafe_allow_html=True)
+    st.subheader('ระบบทำงานอย่างไร')
+    for col, number, title, detail in zip(st.columns(3), ('01', '02', '03'), ('อัปโหลดภาพหรือวิดีโอ', 'ระบบประมวลผลด้วยโมเดล AI', 'ดูตำแหน่งและจำนวนที่ตรวจพบ'), ('เลือกไฟล์ที่คุณมีสิทธิ์และได้รับความยินยอม', 'เริ่มวิเคราะห์เมื่อคุณกดปุ่มเท่านั้น', 'อ่านผลและดาวน์โหลดไฟล์สำหรับการสาธิต')):
+        with col:st.markdown(f'<div class="card"><span class="badge">ขั้นตอน {number}</span><h3>{title}</h3><p>{detail}</p></div>', unsafe_allow_html=True)
+    st.info('เริ่มต้นด้วยการตรวจจับจากภาพก่อนใช้วิดีโอบนระบบคลาวด์ การเปิดหน้านี้ยังไม่โหลดโมเดล')
+
+
+def evaluation():
+    st.subheader('ผลการทดสอบโมเดล')
+    st.caption('ผลที่ตรวจสอบจากงานวิจัยเดิม · ชุดตรวจสอบ (Validation) ไม่ใช่ชุดทดสอบสุดท้าย (Test)')
+    st.info('SKN-1 (YOLO-NAS) · Clean V2 · 315 ภาพ · 805 วัตถุ · 4 ประเภท')
+    for col, label, value in zip(st.columns(4), ('mAP50', 'mAP50–95', 'ความแม่นยำ (Precision)', 'ความครอบคลุม (Recall)'), ('37.48%', '16.88%', '34.10%', '42.11%')):col.metric(label, value)
+    st.metric('คะแนนสมดุลการตรวจจับ (Micro-F1)', '37.69%')
+    st.caption('Precision / Recall / F1 ที่เกณฑ์ความเชื่อมั่น 0.25 และ IoU 0.50 · AP คำนวณจากผลที่เก็บตั้งแต่ 0.001 โดยใช้ COCO maxDet 300')
+    values = ((.315984,.109483,.357311,.412807,.383059),(.363720,.147379,.152941,.590909,.242991),(.527176,.313920,.6,.5625,.580645),(.292375,.104302,.304348,.424242,.354430))
+    st.dataframe([dict(zip(('ประเภท','AP50','AP50–95','ความแม่นยำ','ความครอบคลุม','F1'), (THAI[c], *(f'{x:.2%}' for x in v)))) for c,v in zip(CLASSES, values)], hide_index=True, width='stretch')
+    st.warning('คลาสมีจำนวนตัวอย่างไม่สมดุล และการตรวจคุณภาพคำอธิบายกำกับยังมีข้อจำกัด ผลบนชุดตรวจสอบไม่รับประกันผลกับภาพใหม่ และไม่ได้เป็นหลักฐานความแม่นยำทางการแพทย์')
+    with st.expander('แหล่งข้อมูลและเงื่อนไขการประเมิน'):
+        st.write('หลักฐานจากโครงงานต้นฉบับ:')
+        st.code('results/skn1_optimization/20261023T101106Z_nms30_c2ce10e9b2/\nbaseline_metrics.json\nper_class_baseline.csv\nthreshold_comparison.csv', language=None)
+        st.write('ONNX CPU · NMS IoU 0.30 · เก็บผลตั้งแต่ความเชื่อมั่น 0.001 · จำนวนผลสูงสุด 300 · COCO IoU 0.50–0.95')
+        st.write('หน้านี้สรุปเฉพาะค่าที่ตรวจสอบแล้ว ไม่ได้คัดลอกชุดข้อมูลหรือไฟล์ผลทดลองเข้าระบบเผยแพร่')
+    st.caption('ผลเปรียบเทียบโมเดลบนชุดข้อมูลเดียวกันและผลชุดทดสอบสุดท้าย: ยังไม่มีข้อมูลที่ยืนยันได้ในชุดเผยแพร่นี้')
+    st.caption('ไม่มีกราฟการเรียนรู้ของ SKN-1 เนื่องจากโครงงานไม่ได้ฝึกโมเดลนี้')
+
+
+def about():
+    st.subheader('เกี่ยวกับโครงงาน')
+    st.write('โครงงานระบบตรวจจับปัญหาผิวด้วยปัญญาประดิษฐ์ พัฒนาขึ้นเพื่อสาธิตการประยุกต์ใช้การตรวจจับวัตถุกับภาพและวิดีโอ')
+    with st.container(border=True):
+        st.markdown('**วัตถุประสงค์**\n\nแสดงตำแหน่งและจำนวนลักษณะปัญหาผิว 4 ประเภท พร้อมนำเสนอผลการทดลองอย่างตรวจสอบได้')
+        st.markdown('**เทคโนโลยี**\n\nPython · Streamlit · SKN-1 (YOLO-NAS) · ONNX Runtime (CPU) · การประมวลผลวิดีโอด้วย PyAV')
+        st.markdown('**กระบวนการ**\n\nรับไฟล์ → ตรวจข้อจำกัด → ตรวจจับด้วยโมเดล → แสดงกรอบและตาราง → ดาวน์โหลดผล')
+    st.warning('คุณภาพภาพ แสง มุมกล้อง ขนาดเป้าหมาย และความแตกต่างของข้อมูล อาจทำให้ระบบพลาดหรือแสดงตำแหน่งผิดได้')
+    st.write('ไม่มีการฝึกหรือปรับน้ำหนัก SKN-1 ในแอปนี้ ไม่มีการอนุมานสาเหตุของปัญหาผิวจากภาพ')
+    st.caption('สิทธิ์การเผยแพร่บริการโมเดลออนไลน์ยังอยู่ระหว่างการยืนยัน การปรับหน้าจอรอบนี้ไม่ได้เปิดบริการใหม่')
+
+
+def help_page():
+    st.subheader('คำแนะนำการใช้งาน')
+    with st.expander('ตรวจจับจากภาพ', expanded=True):
+        st.markdown('1. ไปที่ **ตรวจจับจากภาพ**\n2. อัปโหลด JPG, JPEG หรือ PNG ไม่เกิน 5 MB (5 MiB) และ 4 ล้านพิกเซลโดยประมาณ\n3. เลือกรูปแบบการคัดกรอง แล้วกด **เริ่มตรวจจับปัญหาผิว**\n4. อ่านผลจากกรอบ สี และตาราง แล้วดาวน์โหลดผลตามต้องการ')
+    with st.expander('ตรวจจับจากวิดีโอ', expanded=True):
+        st.markdown('1. บนคลาวด์ ให้ตรวจจับภาพสำเร็จในรอบการใช้งานนี้ก่อน\n2. เลือก MP4 ไม่เกิน 20 MB (20 MiB), 12 วินาที, ด้านยาว 1280 พิกเซล และพิกเซลรวมไม่เกิน 1280 × 720\n3. กด **เริ่มวิเคราะห์วิดีโอ** แล้วรอจนเสร็จ\n4. ดูผลรายเฟรม และดาวน์โหลดวิดีโอตัวอย่างหรือข้อมูล CSV')
+        st.caption('ตรวจตัวอย่าง 1 เฟรมต่อวินาที ไม่ตรวจทุกเฟรม ไม่ใช่ระบบเรียลไทม์ วิดีโอผลลัพธ์ไม่มีเสียง')
+    with st.expander('ไม่พบตำแหน่ง หมายความว่าอย่างไร?'):
+        st.write('หมายถึงไม่มีผลที่ผ่านเกณฑ์ของโมเดล ไม่ได้หมายความว่าผิวปกติ ลองใช้ภาพชัด แสงสม่ำเสมอ และหลีกเลี่ยงภาพที่มีตัวกรอง')
+    with st.expander('รูปแบบสมดุลต่างจากเน้นความแม่นยำอย่างไร?'):
+        st.write('สมดุลใช้เกณฑ์ 0.25 ทุกประเภท ส่วนเน้นความแม่นยำเพิ่มเกณฑ์บางประเภทเพื่อลดผลความเชื่อมั่นต่ำ แต่อาจพลาดเป้าหมายมากขึ้น โดยเฉพาะริ้วรอย')
+    with st.expander('ข้อมูลของฉันถูกเก็บอย่างไร?'):
+        st.write('ไฟล์ประมวลผลในระบบแอป ไม่ส่งภาพไปบริการตรวจจับภายนอก ผลลัพธ์อยู่ในรอบการใช้งานชั่วคราว กดล้างข้อมูลเมื่อเสร็จ การล้างไม่ใช่การรับรองการลบข้อมูลอย่างกู้คืนไม่ได้')
+    st.info(DISCLAIMER)
+
+
+def results_view(result, kind):
+    st.subheader('ผลการตรวจจับ')
+    st.success('ประมวลผลสำเร็จ')
+    for col, name in zip(st.columns(4), CLASSES):col.metric(THAI[name], f"{result['counts'][name]} ตำแหน่ง")
+    legend()
+    if not any(result['counts'].values()):
+        st.info('ไม่พบตำแหน่งที่ผ่านเกณฑ์การตรวจจับ การไม่พบตำแหน่งปัญหาผิว ไม่ได้หมายความว่าผิวปกติ')
     if kind == 'image':
-        try:st.image(decode_image(data), caption='ภาพต้นฉบับ', width='stretch')
-        except AppError as error:st.error(MESSAGES[error.code]);return
-    blocked = environment == 'cloud' and kind == 'video' and not st.session_state.get('image_verified')
-    if blocked:st.warning(MESSAGES['VIDEO_IMAGE_FIRST'])
-    if st.button('ตรวจจับ', type='primary', disabled=blocked):
-        st.session_state.pop('result', None);st.session_state.pop('signature', None)
-        progress = st.progress(0., text='เตรียม Runtime และตรวจไฟล์…')
-        try:
-            with st.spinner('กำลังประมวลผล อาจใช้เวลาสำหรับการโหลดโมเดลครั้งแรก…'):
-                result = service(environment).process_media(data, kind, profile,
-                    lambda done, total: progress.progress(min(1., done/max(total,1)), text=f'ประมวลผล {done}/{total} เฟรมตัวอย่าง'))
-            st.session_state.update(result=result, signature=signature, result_time=time.time())
-            if kind == 'image':st.session_state['image_verified'] = True
-            progress.progress(1., text='ประมวลผลสำเร็จ')
-        except AppError as error:
-            progress.empty();st.error(MESSAGES[error.code])
-            if error.code in ('RESOURCE_LIMITED', 'RESOURCE_UNKNOWN'):
-                snapshot = memory_snapshot()
-                runtime = service(environment).runtime if environment == 'cloud' else None
-                cold = runtime is not None and runtime.model is None
-                required = 0
-                diagnostics = {name.removesuffix('_bytes')+'_MiB':
-                    (round(value/MIB, 1) if value is not None else None) for name,value in snapshot.items()}
-                diagnostics.update(required_available_MiB=required,
-                    memory_guard_enforced=False,
-                    stage='before_model_loading' if cold else 'before_inference',
-                    model_constructor_calls=runtime.model_loads if runtime is not None else None)
-                st.caption('ข้อมูลหน่วยความจำสำหรับตรวจสอบข้อจำกัด Cloud — ไม่ใช่การเพิ่ม RAM')
-                st.json(diagnostics)
-        except Exception:progress.empty();st.error(MESSAGES['INFERENCE_FAILED'])
-    result = st.session_state.get('result') if st.session_state.get('signature') == signature else None
-    if result is None:return
-    st.subheader('ผลตรวจจับ')
-    for column, name in zip(st.columns(4), CLASSES):column.metric(name, result['counts'][name])
-    if not any(result['counts'].values()):st.info('ไม่พบ Target เหนือ Confidence ที่เลือก ผลนี้ไม่ใช่การยืนยันว่าผิวปกติ')
-    if kind == 'image':
-        st.image(result['image_bytes'], caption='ภาพพร้อม Bounding boxes', width='stretch')
-        st.download_button('ดาวน์โหลดภาพ Annotated', result['image_bytes'], 'skn_annotated.png', 'image/png')
+        st.image(result['image_bytes'], caption='ภาพผลการตรวจจับ', width='stretch')
+        st.download_button('ดาวน์โหลดภาพผลลัพธ์', result['image_bytes'], 'skn_annotated.png', 'image/png', width='stretch')
     else:
         st.video(result['video_bytes'], format='video/mp4')
-        st.caption('วิดีโอนี้แสดงเฉพาะเฟรมตัวอย่าง 1 FPS พร้อมเวลาเดิม ไม่มีเสียง และไม่ได้ตรวจทุกเฟรม')
-        st.dataframe(result['frames'], hide_index=True)
-        st.download_button('ดาวน์โหลดวิดีโอเฟรมตัวอย่าง', result['video_bytes'], 'skn_sampled.mp4', 'video/mp4')
-    st.dataframe(result['predictions'], hide_index=True)
-    st.download_button('ดาวน์โหลด CSV', result['csv_bytes'], 'skn_detections.csv', 'text/csv')
-    st.caption(f"Inference รวม {result['inference_seconds']:.2f} วินาที · {result['backend']}")
-    with st.expander('Runtime / Memory'):
-        snapshot = memory_snapshot()
-        diagnostics = {name.removesuffix('_bytes')+'_MiB':
-            (round(value/MIB, 1) if value is not None else None) for name,value in snapshot.items()}
-        diagnostics.update(memory_guard_enforced=False, model_loads=result.get('model_loads'),
-            model_load_seconds=result.get('model_load_seconds'))
-        st.json(diagnostics)
+        st.caption('วิดีโอผลลัพธ์แสดงเฉพาะเฟรมตัวอย่าง 1 เฟรมต่อวินาที พร้อมเวลาเดิม ไม่มีเสียง')
+        st.dataframe(display_rows(result['frames']), hide_index=True, width='stretch')
+        st.caption(f"เวลาประมวลผลวิดีโอรวม {result.get('processing_seconds', 0):.2f} วินาที")
+        st.download_button('ดาวน์โหลดวิดีโอผลลัพธ์', result['video_bytes'], 'skn_sampled.mp4', 'video/mp4', width='stretch')
+    if result['predictions']:
+        st.dataframe(display_rows(result['predictions']), hide_index=True, width='stretch')
+    st.download_button('ดาวน์โหลดข้อมูล CSV', result['csv_bytes'], 'skn_detections.csv', 'text/csv', width='stretch')
+    st.caption(f"SKN-1 · เวลาที่ใช้ตรวจจับ {result['inference_seconds']:.2f} วินาที · ประมวลผลด้วย CPU")
+    with st.expander('ข้อมูลการทำงานและหน่วยความจำ'):
+        st.write('การโหลดโมเดลครั้งแรกอาจใช้เวลามากกว่าการตรวจจับครั้งต่อไป ข้อจำกัดทรัพยากรของผู้ให้บริการยังมีผล')
+        if result.get('model_load_seconds') is not None:
+            st.caption(f"เวลาโหลดโมเดล {result['model_load_seconds']:.2f} วินาที (ไม่ใช่เวลาประมวลผลต่อภาพ)")
+    st.button('ตรวจจับภาพใหม่' if kind == 'image' else 'วิเคราะห์วิดีโอใหม่', on_click=clear_media)
+
+
+def detection(kind, environment):
+    st.subheader('ตรวจจับปัญหาผิวจากภาพ' if kind == 'image' else 'ตรวจจับปัญหาผิวจากวิดีโอ')
+    left, right = st.columns([1, 1.6], gap='large')
+    with left:
+        with st.container(border=True):
+            st.markdown('### อัปโหลดรูปภาพ' if kind == 'image' else '### อัปโหลดวิดีโอ')
+            st.caption('รองรับ JPG, JPEG และ PNG ขนาดไม่เกิน 5 MB (5 MiB) · ไม่เกิน 4 ล้านพิกเซลโดยประมาณ' if kind == 'image' else
+                       'รองรับ MP4 ไม่เกิน 20 MB (20 MiB) · 12 วินาที · ด้านยาวไม่เกิน 1280 พิกเซล · พิกเซลรวมไม่เกิน 1280 × 720')
+            if kind == 'video':st.info('วิเคราะห์ตัวอย่าง 1 เฟรมต่อวินาที ไม่ใช่ระบบตรวจจับแบบเรียลไทม์')
+            uploaded = st.file_uploader('เลือกไฟล์รูปภาพ' if kind == 'image' else 'เลือกไฟล์วิดีโอ', type=['jpg', 'jpeg', 'png'] if kind == 'image' else ['mp4'], key=f"upload-{kind}-{st.session_state.get('upload_generation',0)}", max_upload_size=(LIMITS.image_bytes if kind == 'image' else LIMITS.video_bytes)//1024**2)
+            profile = st.selectbox('รูปแบบการคัดกรองผลตรวจจับ', list(PROFILES), format_func=PROFILE_LABELS.get, key=f'profile-{kind}')
+            st.caption('เน้นความแม่นยำอาจแสดงผลน้อยลงและพลาดบางตำแหน่ง โดยเฉพาะริ้วรอย')
+            st.caption('ใช้เฉพาะไฟล์ที่คุณมีสิทธิ์และได้รับความยินยอม ไม่อัปโหลดข้อมูลส่วนบุคคลที่ไม่จำเป็น')
+    with right:
+        if uploaded is None:
+            st.markdown('<div class="empty"><h3>พร้อมเริ่มต้นเมื่อคุณเลือกไฟล์</h3><p>ภาพตัวอย่างและผลการตรวจจับจะแสดงในบริเวณนี้<br>ระบบยังไม่โหลดโมเดลจนกว่าคุณจะเริ่มตรวจจับ</p></div>', unsafe_allow_html=True)
+            return
+        if uploaded.size > (LIMITS.image_bytes if kind == 'image' else LIMITS.video_bytes):
+            st.error(MESSAGES['UPLOAD_TOO_LARGE']);return
+        data = uploaded.getvalue()
+        signature = (kind, hashlib.sha256(data).hexdigest(), profile)
+        if st.session_state.get('signature') != signature:st.session_state.pop('result', None)
+        if kind == 'image':
+            try:st.image(decode_image(data), caption='ภาพต้นฉบับ', width='stretch')
+            except AppError as error:st.error(MESSAGES[error.code]);return
+        else:st.video(data, format='video/mp4')
+        blocked = environment == 'cloud' and kind == 'video' and not st.session_state.get('image_verified')
+        if blocked:st.warning(MESSAGES['VIDEO_IMAGE_FIRST'])
+        if st.button('เริ่มตรวจจับปัญหาผิว' if kind == 'image' else 'เริ่มวิเคราะห์วิดีโอ', type='primary', disabled=blocked, width='stretch'):
+            st.session_state.pop('result', None);st.session_state.pop('signature', None)
+            progress = st.progress(0., text='กำลังเตรียมระบบและตรวจสอบไฟล์…')
+            try:
+                with st.spinner('ระบบกำลังวิเคราะห์รูปภาพ กรุณารอสักครู่...' if kind == 'image' else 'ระบบกำลังวิเคราะห์วิดีโอ กรุณารอสักครู่...'):
+                    result = service(environment).process_media(data, kind, profile,
+                        lambda done,total: progress.progress(min(1.,done/max(total,1)), text=f'กำลังประมวลผลเฟรมที่ {done} จาก {total}'))
+                st.session_state.update(result=result, signature=signature, result_time=time.time())
+                if kind == 'image':st.session_state['image_verified'] = True
+                progress.progress(1., text='ประมวลผลสำเร็จ')
+            except AppError as error:progress.empty();st.error(MESSAGES[error.code])
+            except Exception:progress.empty();st.error(MESSAGES['INFERENCE_FAILED'])
+        result = st.session_state.get('result') if st.session_state.get('signature') == signature else None
+        if result is not None:results_view(result, kind)
+
+
+def main():
+    st.set_page_config(page_title='ระบบตรวจจับปัญหาผิว · SKN-1', page_icon='🔬', layout='wide')
+    st.markdown(CSS, unsafe_allow_html=True)  # Fixed trusted markup only; never interpolate uploads.
+    environment = mode()
+    if time.time()-st.session_state.get('result_time', 0) > LIMITS.result_ttl_seconds:
+        st.session_state.pop('result', None);st.session_state.pop('signature', None)
+    with st.sidebar:
+        st.markdown('### ◈ วิเคราะห์ผิวด้วย AI')
+        st.caption('SKN-1 · โครงงานการเรียนรู้ของเครื่อง')
+        page = st.radio('เมนูหลัก', PAGES, key='navigation')
+        st.divider()
+        st.caption('การเปิดหน้าเว็บยังไม่โหลดโมเดล การตรวจจับเริ่มเมื่อกดปุ่มเท่านั้น')
+        st.button('ล้างข้อมูลการใช้งาน', on_click=clear_media, width='stretch')
+        st.markdown('[ข้อมูลโมเดล](https://universe.roboflow.com/skn-f1vaw/skn-1) · [ข้อมูลสิทธิ์การใช้งาน](https://github.com/Deci-AI/super-gradients/blob/master/LICENSE.YOLONAS.md)')
+    st.title('ระบบตรวจจับปัญหาผิวด้วยปัญญาประดิษฐ์')
+    st.caption('SKN-1 (YOLO-NAS) · ระบบต้นแบบสำหรับการศึกษา')
+    if page == PAGES[0]:home()
+    elif page == PAGES[1]:detection('image', environment)
+    elif page == PAGES[2]:detection('video', environment)
+    elif page == PAGES[3]:evaluation()
+    elif page == PAGES[4]:about()
+    else:help_page()
+    st.divider()
+    st.caption(DISCLAIMER)
+    st.caption('การไม่พบตำแหน่งปัญหาผิว ไม่ได้หมายความว่าผิวปกติ')

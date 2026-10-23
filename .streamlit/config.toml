@@ -11,3 +11,7 @@ showErrorDetails = false
 
 [browser]
 gatherUsageStats = false
+
+[theme]
+primaryColor = "#0D9488"
+font = "sans serif"
