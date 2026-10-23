@@ -8,8 +8,10 @@ from .errors import AppError
 MIB = 1024**2
 
 
-def available_memory():
+def memory_snapshot():
     candidates = []
+    details = {'host_available_bytes': None, 'cgroup_limit_bytes': None,
+               'cgroup_used_bytes': None, 'process_rss_bytes': None}
     if sys.platform == 'win32':
         import ctypes
         class Memory(ctypes.Structure):
@@ -18,10 +20,12 @@ def available_memory():
         status = Memory();status.length = ctypes.sizeof(status)
         if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
             candidates.append(status.available)
+            details['host_available_bytes'] = status.available
     else:
         try:
             fields = dict(line.split(':', 1) for line in Path('/proc/meminfo').read_text().splitlines())
             candidates.append(int(fields['MemAvailable'].split()[0])*1024)
+            details['host_available_bytes'] = candidates[-1]
         except (OSError, KeyError, ValueError):
             pass
         for maximum, current in [('/sys/fs/cgroup/memory.max', '/sys/fs/cgroup/memory.current'),
@@ -32,9 +36,20 @@ def available_memory():
                     limit, used = int(text), int(Path(current).read_text())
                     if 0 < limit < 2**60:
                         candidates.append(max(0, limit-used))
+                        if details['cgroup_limit_bytes'] is None or limit < details['cgroup_limit_bytes']:
+                            details.update(cgroup_limit_bytes=limit, cgroup_used_bytes=used)
             except (OSError, ValueError):
                 pass
-    return min(candidates) if candidates else None
+        try:
+            details['process_rss_bytes'] = int(Path('/proc/self/statm').read_text().split()[1])*os.sysconf('SC_PAGE_SIZE')
+        except (OSError, ValueError, IndexError):
+            pass
+    details['available_bytes'] = min(candidates) if candidates else None
+    return details
+
+
+def available_memory():
+    return memory_snapshot()['available_bytes']
 
 
 def guard_memory(cold=False, video=False):

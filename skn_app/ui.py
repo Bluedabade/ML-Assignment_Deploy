@@ -5,6 +5,7 @@ import streamlit as st
 from .config import CLASSES, LIMITS, PROFILES, mode
 from .errors import AppError, MESSAGES
 from .media import decode_image
+from .resources import memory_snapshot, MIB
 
 
 @st.cache_resource(max_entries=1, show_spinner=False)
@@ -60,7 +61,20 @@ def main():
             st.session_state.update(result=result, signature=signature, result_time=time.time())
             if kind == 'image':st.session_state['image_verified'] = True
             progress.progress(1., text='ประมวลผลสำเร็จ')
-        except AppError as error:progress.empty();st.error(MESSAGES[error.code])
+        except AppError as error:
+            progress.empty();st.error(MESSAGES[error.code])
+            if error.code in ('RESOURCE_LIMITED', 'RESOURCE_UNKNOWN'):
+                snapshot = memory_snapshot()
+                runtime = service(environment).runtime if environment == 'cloud' else None
+                cold = runtime is not None and runtime.model is None
+                required = 768 if cold else (192 if kind == 'video' else 128)
+                diagnostics = {name.removesuffix('_bytes')+'_MiB':
+                    (round(value/MIB, 1) if value is not None else None) for name,value in snapshot.items()}
+                diagnostics.update(required_available_MiB=required,
+                    stage='before_model_loading' if cold else 'before_inference',
+                    model_constructor_calls=runtime.model_loads if runtime is not None else None)
+                st.caption('ข้อมูลหน่วยความจำสำหรับตรวจสอบข้อจำกัด Cloud — ไม่ใช่การเพิ่ม RAM')
+                st.json(diagnostics)
         except Exception:progress.empty();st.error(MESSAGES['INFERENCE_FAILED'])
     result = st.session_state.get('result') if st.session_state.get('signature') == signature else None
     if result is None:return

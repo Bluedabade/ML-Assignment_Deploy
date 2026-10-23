@@ -16,7 +16,7 @@ from PIL import Image
 from skn_app.config import CLASSES, LIMITS, PROFILES
 from skn_app.errors import AppError, safe_code
 from skn_app.media import decode_image, process_image, process_video, video_metadata
-from skn_app.resources import guard_memory, available_memory
+from skn_app.resources import guard_memory, available_memory, memory_snapshot
 from skn_app.secrets import authentication
 from skn_app.runtime import ModelRuntime
 from skn_app.cloud_adapter import CloudAdapter
@@ -111,6 +111,22 @@ class AppTests(unittest.TestCase):
             with self.assertRaises(AppError) as error:adapter.process_media(b'data','image','Balanced')
             self.assertEqual(error.exception.code,'BUSY')
         finally:adapter.lock.release()
+
+    def test_safe_linux_memory_snapshot_reports_limit_usage_without_environment(self):
+        files={'/proc/meminfo':'MemAvailable: 8000000 kB\n',
+               '/sys/fs/cgroup/memory.max':'1073741824',
+               '/sys/fs/cgroup/memory.current':'1000000000',
+               '/proc/self/statm':'100 20 0 0 0 0 0'}
+        def read(path,*args,**kwargs):
+            name=str(path).replace('\\','/')
+            if name in files:return files[name]
+            raise FileNotFoundError()
+        with patch('skn_app.resources.sys.platform','linux'),patch.object(Path,'read_text',read),patch('skn_app.resources.os.sysconf',return_value=4096,create=True):
+            result=memory_snapshot()
+        self.assertEqual(result['cgroup_limit_bytes'],1073741824)
+        self.assertEqual(result['cgroup_used_bytes'],1000000000)
+        self.assertEqual(result['process_rss_bytes'],81920)
+        self.assertEqual(result['available_bytes'],73741824)
 
     def test_cloud_job_temp_cleanup_on_error(self):
         adapter=CloudAdapter(lambda name:'dummy');adapter.image_verified=True;folders=[]
