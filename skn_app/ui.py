@@ -56,6 +56,16 @@ button{border-radius:12px!important;transition:box-shadow .15s}button:hover{box-
 .st-key-skincare-guidance a{color:var(--ink);text-decoration:underline}
 .st-key-interactive-image [data-testid="stAlertContainer"]{background:var(--surface);border:1px solid var(--line);color:var(--ink)}
 .st-key-interactive-image [data-testid="stAlertContainer"] p{color:var(--ink)}
+.st-key-detection-summary [data-testid="stHorizontalBlock"]{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem}
+.st-key-detection-summary [data-testid="stColumn"]{width:100%!important;min-width:0!important}
+.st-key-detection-summary [data-testid="stMetric"]{padding:.65rem}
+.st-key-detection-summary [data-testid="stMetricLabel"] p{white-space:normal!important;overflow:visible!important;color:var(--ink)}
+.st-key-detection-summary [data-testid="stMetricValue"]{font-size:1.8rem;color:var(--ink)}
+[data-testid="stCaptionContainer"] p{color:var(--muted)!important}
+.st-key-interactive-image summary{color:var(--ink);background:var(--surface)}
+.st-key-image-preview img{max-height:480px;object-fit:contain;width:100%;border-radius:14px}
+@media(max-width:900px){.st-key-detection-summary [data-testid="stHorizontalBlock"]{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.st-key-image-preview img{max-height:360px}}
 @media(max-width:640px){.block-container{padding:1.2rem 1rem}.hero{padding:1.25rem}.card{min-height:unset}h1{font-size:1.65rem!important}}
 </style>
 '''
@@ -203,10 +213,24 @@ def _skincare_guidance_content(counts, *, showcase=False):
         for title, url in NUTRITION_REFERENCES:st.markdown(f'- [{title}]({url})')
 
 
+def preview_image(image, caption):
+    """Bound display dimensions only; never touch inference or download pixels."""
+    from .presentation import preview_thumbnail
+    with st.container(key='image-preview'):
+        st.image(preview_thumbnail(image), caption=caption, width='stretch', output_format='PNG')
+
+
+def summary_cards(counts):
+    with st.container(key='detection-summary'):
+        for col, name in zip(st.columns(4), CLASSES):
+            col.metric(THAI[name], str(counts[name]))
+    st.caption('จำนวนตำแหน่งที่ผ่านเกณฑ์การแสดงผล')
+
+
 def results_view(result, kind, *, allow_reset=True):
     st.subheader('ผลการตรวจจับ')
     st.success('ประมวลผลสำเร็จ')
-    for col, name in zip(st.columns(4), CLASSES):col.metric(THAI[name], f"{result['counts'][name]} ตำแหน่ง")
+    summary_cards(result['counts'])
     legend()
     if not any(result['counts'].values()):
         st.info('ไม่พบตำแหน่งที่ผ่านเกณฑ์การตรวจจับ การไม่พบตำแหน่งปัญหาผิว ไม่ได้หมายความว่าผิวปกติ')
@@ -216,12 +240,15 @@ def results_view(result, kind, *, allow_reset=True):
     else:
         st.video(result['video_bytes'], format='video/mp4')
         st.caption('วิดีโอผลลัพธ์แสดงเฉพาะเฟรมตัวอย่าง 1 เฟรมต่อวินาที พร้อมเวลาเดิม ไม่มีเสียง')
-        st.dataframe(display_rows(result['frames']), hide_index=True, width='stretch')
+        with st.expander('ผลแต่ละเฟรม'):
+            st.dataframe(display_rows(result['frames']), hide_index=True, width='stretch')
         st.caption(f"เวลาประมวลผลวิดีโอรวม {result.get('processing_seconds', 0):.2f} วินาที")
         st.download_button('ดาวน์โหลดวิดีโอผลลัพธ์', result['video_bytes'], 'skn_sampled.mp4', 'video/mp4', width='stretch')
-    skincare_guidance_view(result['counts'])
-    if result['predictions']:
-        st.dataframe(display_rows(result['predictions']), hide_index=True, width='stretch')
+    with st.expander('คำแนะนำการดูแลผิว'):
+        skincare_guidance_view(result['counts'])
+    with st.expander('ตารางตำแหน่งตรวจจับ'):
+        if result['predictions']:
+            st.dataframe(display_rows(result['predictions']), hide_index=True, width='stretch')
     st.download_button('ดาวน์โหลดข้อมูล CSV', result['csv_bytes'], 'skn_detections.csv', 'text/csv', width='stretch')
     st.caption(f"SKN-1 · เวลาที่ใช้ตรวจจับ {result['inference_seconds']:.2f} วินาที · ประมวลผลด้วย CPU")
     with st.expander('ข้อมูลการทำงานและหน่วยความจำ'):
@@ -244,49 +271,85 @@ def interactive_image_results(key):
         _interactive_image_results(key)
 
 
+def change_confidence(prefix):
+    st.session_state[prefix+'mode'] = CUSTOM
+
+
 def _interactive_image_results(key):
     cache = get_image_cache(st.session_state, key, time.time())
     if cache is None:
-        st.info('ผลตรวจจับหมดอายุหรือถูกล้าง กรุณากดเริ่มตรวจจับอีกครั้ง')
-        return
+        st.info('ผลตรวจจับหมดอายุหรือถูกล้าง กรุณากดเริ่มตรวจจับอีกครั้ง');return
     prefix = 'image-display-'+key+'-'
-    st.subheader('ตั้งค่าการแสดงผลตรวจจับ')
-    settings_column, preview_column = st.columns([1, 1.65], gap='large')
-    with settings_column:
-        labels = dict(PROFILE_LABELS, **{CUSTOM:'กำหนดเกณฑ์เอง'})
-        profile = st.selectbox('รูปแบบการคัดกรองผลตรวจจับ', list(labels), format_func=labels.get, key=prefix+'mode')
-        threshold = .25
-        if profile == CUSTOM:
-            st.session_state.setdefault(prefix+'threshold',25)
-            threshold = st.slider('ระดับความเชื่อมั่นขั้นต่ำ', min_value=10, max_value=90, step=1, format='%d%%', key=prefix+'threshold')/100
-            st.caption(f'กำลังแสดงผลที่ความเชื่อมั่นอย่างน้อย {threshold:.0%} ทุกประเภท')
-            if threshold < .20:
-                st.warning('เกณฑ์ความเชื่อมั่นต่ำอาจทำให้แสดงตำแหน่งที่ไม่ถูกต้องจำนวนมาก ผลนี้เหมาะสำหรับการสำรวจการทำงานของโมเดล ไม่ใช่การยืนยันปัญหาผิว')
+    st.session_state.setdefault(prefix+'mode','Balanced')
+    st.session_state.setdefault(prefix+'threshold',25)
+    st.session_state.setdefault(prefix+'opacity',65)
+    # Render controls into placeholders while keeping summary and image first on mobile.
+    st.subheader('ผลการตรวจจับ')
+    summary = st.container()
+    image_column, control_column = st.columns([1.5,1], gap='medium')
+    with image_column:
+        selected = st.radio('เลือกภาพที่ต้องการดู', ['ภาพผลตรวจจับ','ภาพต้นฉบับ'], horizontal=True, key=prefix+'image')
+        image_slot = st.container()
+    with control_column:
+        profile = st.session_state[prefix+'mode']
+        if profile == 'Balanced':st.session_state[prefix+'threshold'] = 25
+        st.slider('ระดับความเชื่อมั่นขั้นต่ำ', min_value=10, max_value=90, step=1, format='%d%%',
+            key=prefix+'threshold', disabled=profile=='Precision-focused', on_change=change_confidence, args=(prefix,))
+        st.caption('ลดค่าเพื่อแสดงตำแหน่งมากขึ้น เพิ่มค่าเพื่อคัดกรองเข้มงวดขึ้น')
+        if profile == 'Precision-focused':st.caption('ใช้เกณฑ์รายประเภทตามโหมดเน้นความแม่นยำ เลือกกำหนดเกณฑ์เองเพื่อปรับ Slider')
+        with st.expander('ตั้งค่าขั้นสูง'):
+            labels = dict(PROFILE_LABELS, **{CUSTOM:'กำหนดเกณฑ์เอง'})
+            profile = st.selectbox('รูปแบบการคัดกรองผลตรวจจับ', list(labels), format_func=labels.get, key=prefix+'mode')
+            opacity = st.slider('ความเข้มของกรอบตรวจจับ', min_value=10,max_value=100,step=1,format='%d%%',key=prefix+'opacity')/100
+            label_names={'class_percent':'ชื่อประเภทและเปอร์เซ็นต์','percent':'เปอร์เซ็นต์เท่านั้น','none':'ซ่อนข้อความ'}
+            label_mode=st.selectbox('การแสดงข้อความบนกรอบ',list(label_names),format_func=label_names.get,key=prefix+'labels')
+            st.button('รีเซ็ตการแสดงผล',on_click=reset_image_display,args=(prefix,))
+        threshold=st.session_state[prefix+'threshold']/100
+        if profile == CUSTOM and threshold < .20:
+            st.warning('เกณฑ์ต่ำอาจทำให้ตรวจจับผิดพลาดมากขึ้น')
+        st.caption('สมดุล 25%' if profile=='Balanced' else ('กำหนดเกณฑ์เอง' if profile==CUSTOM else 'เน้นความแม่นยำของผลที่แสดง'))
+    try:
+        image=decode_image(cache['original_bytes'])
+        view=build_image_result(image,cache['candidates'],display_thresholds(profile,threshold),opacity,label_mode)
+        view.update(cache['metadata'])
+    except AppError as error:st.error(MESSAGES[error.code]);return
+    with summary:
+        summary_cards(view['counts'])
+        if not any(view['counts'].values()):st.info('ไม่พบตำแหน่งที่ผ่านเกณฑ์ ผลนี้ไม่ได้ยืนยันว่าผิวไม่มีปัญหา')
+    with image_slot:
+        if selected=='ภาพต้นฉบับ':preview_image(image,'ภาพต้นฉบับ')
         else:
-            st.caption('กำลังใช้เกณฑ์รายประเภท: '+' · '.join(f'{THAI[c]} {PROFILES[profile][c]:.1%}' for c in CLASSES))
-        st.caption('ค่าต่ำจะแสดงตำแหน่งมากขึ้น แต่อาจเพิ่มผลตรวจจับผิดพลาด ค่าสูงจะคัดกรองเข้มงวดขึ้น แต่อาจพลาดตำแหน่งจริง')
-        st.session_state.setdefault(prefix+'opacity',65)
-        opacity = st.slider('ความเข้มของกรอบตรวจจับ', min_value=10, max_value=100, step=1, format='%d%%', key=prefix+'opacity')/100
-        label_names = {'class_percent':'ชื่อประเภทและเปอร์เซ็นต์','percent':'เปอร์เซ็นต์เท่านั้น','none':'ซ่อนข้อความ'}
-        label_mode = st.selectbox('การแสดงข้อความบนกรอบ', list(label_names), format_func=label_names.get, key=prefix+'labels')
-        st.button('รีเซ็ตการแสดงผล', on_click=reset_image_display, args=(prefix,))
-        st.caption('ปรับจาก Candidates เดิมโดยไม่เรียกโมเดลซ้ำ Slider อัปเดตเมื่อปล่อยเมาส์หรือยืนยันค่า ข้อความบนภาพใช้ชื่ออังกฤษพร้อมคำอธิบายสีภาษาไทย')
-        st.caption('Candidates ผ่าน NMS IoU 0.30 และ cap 300 ของ SDK แล้ว อาจมีกล่องถูกตัดออกก่อนถึงขั้นนี้ เกณฑ์ใหม่ไม่สามารถกู้กล่องเหล่านั้นได้')
-    with preview_column:
-        try:
-            image = decode_image(cache['original_bytes'])
-            view = build_image_result(image, cache['candidates'], display_thresholds(profile, threshold), opacity, label_mode)
-            view.update(cache['metadata'])
-            results_view(view, 'image', allow_reset=False)
-        except AppError as error:
-            st.error(MESSAGES[error.code]);return
-        if st.button('ตรวจจับภาพใหม่'):
-            clear_media();st.rerun(scope='app')
+            import io
+            from PIL import Image
+            preview_image(Image.open(io.BytesIO(view['image_bytes'])),'ภาพผลตรวจจับ')
+    st.markdown('#### ดาวน์โหลดผลลัพธ์')
+    png,csv=st.columns(2)
+    png.download_button('ดาวน์โหลดภาพ PNG',view['image_bytes'],'skn_annotated.png','image/png',width='stretch')
+    csv.download_button('ดาวน์โหลดข้อมูล CSV',view['csv_bytes'],'skn_detections.csv','text/csv',width='stretch')
+    with st.expander('ตารางตำแหน่งตรวจจับ'):
+        legend()
+        if view['predictions']:st.dataframe(display_rows(view['predictions']),hide_index=True,width='stretch')
+        else:st.write('ไม่มีตำแหน่งที่ผ่านเกณฑ์')
+    with st.expander('คำแนะนำการดูแลผิว'):
+        skincare_guidance_view(view['counts'])
+    with st.expander('รายละเอียดทางเทคนิค'):
+        st.write('SKN-1 · ONNX CPU · NMS IoU 0.30 · สูงสุด 300 ตำแหน่ง · เก็บผลเฉพาะ Session 600 วินาที')
+        st.caption('Candidates ผ่าน NMS และการจำกัดจำนวนแล้ว ไม่สามารถกู้กล่องที่ถูกตัดทิ้งได้ การปรับหน้าจอไม่เรียกโมเดลซ้ำ Slider อัปเดตเมื่อปล่อยเมาส์')
+        st.caption('เกณฑ์ความเชื่อมั่นต่ำอาจทำให้แสดงตำแหน่งที่ไม่ถูกต้องจำนวนมาก ผลนี้เหมาะสำหรับการสำรวจการทำงานของโมเดล ไม่ใช่การยืนยันปัญหาผิว')
+        st.caption(f"เวลาตรวจจับ {view['inference_seconds']:.2f} วินาที · ข้อความบนภาพใช้ภาษาอังกฤษ พร้อมคำอธิบายสีภาษาไทย")
+    if st.button('ตรวจจับภาพใหม่'):
+        clear_media();st.rerun(scope='app')
 
 
 def detection(kind, environment):
     st.subheader('ตรวจจับปัญหาผิวจากภาพ' if kind == 'image' else 'ตรวจจับปัญหาผิวจากวิดีโอ')
-    left, right = st.columns([1, 1.6], gap='large')
+    st.caption('อัปโหลดภาพใบหน้าเพื่อให้ระบบตรวจจับลักษณะปัญหาผิว' if kind=='image' else 'อัปโหลดวิดีโอ → เริ่มวิเคราะห์ → ดูผลและดาวน์โหลด')
+    if kind == 'image':
+        cached = get_image_cache(st.session_state, now=time.time())
+        if cached is not None:
+            interactive_image_results(cached['key'])
+            return
+    left, right = st.columns([1, 1.6], gap='medium')
     with left:
         with st.container(border=True):
             st.markdown('### อัปโหลดรูปภาพ' if kind == 'image' else '### อัปโหลดวิดีโอ')
@@ -296,10 +359,10 @@ def detection(kind, environment):
             uploaded = st.file_uploader('เลือกไฟล์รูปภาพ' if kind == 'image' else 'เลือกไฟล์วิดีโอ', type=['jpg', 'jpeg', 'png'] if kind == 'image' else ['mp4'], key=f"upload-{kind}-{st.session_state.get('upload_generation',0)}", max_upload_size=(LIMITS.image_bytes if kind == 'image' else LIMITS.video_bytes)//1024**2)
             profile = 'Balanced'
             if kind == 'video':
-                profile = st.selectbox('รูปแบบการคัดกรองผลตรวจจับ', list(PROFILES), format_func=PROFILE_LABELS.get, key=f'profile-{kind}')
+                with st.expander('ตั้งค่าขั้นสูง'):
+                    profile = st.selectbox('รูปแบบการคัดกรองผลตรวจจับ', list(PROFILES), format_func=PROFILE_LABELS.get, key=f'profile-{kind}')
                 st.caption('วิดีโอใช้เกณฑ์ที่เลือกตอนเริ่มงาน ไม่มี Slider แบบภาพ การเปลี่ยนเกณฑ์ต้องเริ่มงานใหม่เอง')
-            else:st.caption('หลังตรวจจับครั้งเดียว สามารถเลือกโปรไฟล์หรือปรับเกณฑ์และกรอบได้จากผลเดิม')
-            st.caption('เน้นความแม่นยำอาจแสดงผลน้อยลงและพลาดบางตำแหน่ง โดยเฉพาะริ้วรอย')
+
             st.caption('ใช้เฉพาะไฟล์ที่คุณมีสิทธิ์และได้รับความยินยอม ไม่อัปโหลดข้อมูลส่วนบุคคลที่ไม่จำเป็น')
     with right:
         if uploaded is None:
@@ -314,12 +377,17 @@ def detection(kind, environment):
         if kind == 'image':get_image_cache(st.session_state, signature, time.time())
         if st.session_state.get('signature') != signature:st.session_state.pop('result', None)
         if kind == 'image':
-            try:st.image(decode_image(data), caption='ภาพต้นฉบับ', width='stretch')
+            try:decode_image(data)
             except AppError as error:st.error(MESSAGES[error.code]);return
+            if get_image_cache(st.session_state, signature, time.time()) is None and st.button('เปลี่ยนภาพ'):
+                clear_media();st.rerun()
         else:st.video(data, format='video/mp4')
         blocked = environment == 'cloud' and kind == 'video' and not st.session_state.get('image_verified')
         if blocked:st.warning(MESSAGES['VIDEO_IMAGE_FIRST'])
-        if st.button('เริ่มตรวจจับปัญหาผิว' if kind == 'image' else 'เริ่มวิเคราะห์วิดีโอ', type='primary', disabled=blocked, width='stretch'):
+        completed = kind=='image' and get_image_cache(st.session_state,signature,time.time()) is not None
+        clicked = not completed and st.button('เริ่มตรวจจับปัญหาผิว' if kind == 'image' else 'เริ่มวิเคราะห์วิดีโอ', type='primary', disabled=blocked, width='stretch')
+        if kind == 'image' and not completed:preview_image(decode_image(data), 'ภาพที่เลือก')
+        if clicked:
             st.session_state.pop('result', None);st.session_state.pop('signature', None)
             if kind == 'image':st.session_state.pop(CACHE_SLOT, None)
             progress = st.progress(0., text='กำลังเตรียมระบบและตรวจสอบไฟล์…')
@@ -333,6 +401,7 @@ def detection(kind, environment):
                 else:st.session_state.update(result=result, signature=signature, result_time=time.time())
                 if kind == 'image':st.session_state['image_verified'] = True
                 progress.progress(1., text='ประมวลผลสำเร็จ')
+                if kind == 'image':st.rerun()
             except AppError as error:progress.empty();st.error(MESSAGES[error.code])
             except Exception:progress.empty();st.error(MESSAGES['INFERENCE_FAILED'])
         if kind == 'video':

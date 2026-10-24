@@ -75,7 +75,7 @@ result=dict(counts=dict(acne=0,wrinkle=0,dark_spot=0,enlarged_pore=1),
 results_view(result,'image')
 '''
         pore_view = AppTest.from_string(pore_fixture).run()
-        if pore_view.exception or pore_view.metric[3].label != THAI['enlarged_pore'] or pore_view.metric[3].value != '1 ตำแหน่ง':
+        if pore_view.exception or pore_view.metric[3].label != THAI['enlarged_pore'] or pore_view.metric[3].value != '1':
             raise RuntimeError('PORE_METRIC_RENDER_FAILED')
         if pore_view.dataframe[0].value.iloc[0]['ประเภท'] != THAI['enlarged_pore']:
             raise RuntimeError('PORE_TABLE_RENDER_FAILED')
@@ -118,19 +118,23 @@ interactive_image_results(st.session_state[CACHE_SLOT]['key'])
 '''
         with patch.object(ui, 'service', side_effect=forbid_model) as adapter:
             interactive = AppTest.from_string(interactive_fixture).run()
-            if interactive.exception or interactive.metric[3].value != '1 ตำแหน่ง':
+            if interactive.exception or interactive.metric[3].value != '1':
                 raise RuntimeError('INTERACTIVE_BASELINE_FAILED')
-            interactive.selectbox[0].set_value('Custom').run()
+            if interactive.slider[0].value != 25:raise RuntimeError('DEFAULT_SLIDER_MISSING')
+            if not any(e.label=='ตั้งค่าขั้นสูง' for e in interactive.expander):raise RuntimeError('ADVANCED_MISSING')
+            interactive.radio[0].set_value('ภาพต้นฉบับ').run()
+            if interactive.exception:raise RuntimeError('ORIGINAL_SWITCH_FAILED')
+            interactive.radio[0].set_value('ภาพผลตรวจจับ').run()
             interactive.slider[0].set_value(10).run()
-            if interactive.exception or interactive.metric[3].value != '2 ตำแหน่ง' or not interactive.warning:
+            if interactive.exception or interactive.metric[3].value != '2' or not interactive.warning:
                 raise RuntimeError('INTERACTIVE_LOW_THRESHOLD_FAILED')
             interactive.slider[0].set_value(90).run()
-            if interactive.exception or interactive.metric[3].value != '0 ตำแหน่ง':
+            if interactive.exception or interactive.metric[3].value != '0':
                 raise RuntimeError('INTERACTIVE_HIGH_THRESHOLD_FAILED')
             interactive.slider[1].set_value(10).run()
             interactive.selectbox[1].set_value('none').run()
             interactive.selectbox[0].set_value('Precision-focused').run()
-            if interactive.exception or interactive.metric[3].value != '1 ตำแหน่ง':
+            if interactive.exception or interactive.metric[3].value != '1':
                 raise RuntimeError('INTERACTIVE_PROFILE_FAILED')
             next(b for b in interactive.button if b.label == 'รีเซ็ตการแสดงผล').click().run()
             if interactive.exception or interactive.selectbox[0].value != 'Balanced':

@@ -95,3 +95,11 @@ def get_image_cache(state, key=None, now=0):
     if (key is not None and cache['key'] != key) or not 0 <= now-cache['created_at'] < LIMITS.result_ttl_seconds:
         state.pop(CACHE_SLOT, None);return None
     return cache
+
+
+def preview_thumbnail(image, max_size=(960,480)):
+    """Copy/contain for display only; source and original-resolution export are preserved."""
+    if len(max_size)!=2 or min(max_size)<=0:raise ValueError('INVALID_PREVIEW_SIZE')
+    result=image.copy()
+    result.thumbnail(max_size, Image.Resampling.LANCZOS)
+    return result

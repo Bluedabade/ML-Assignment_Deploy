@@ -171,3 +171,30 @@ class InteractiveTests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+
+class PreviewUXTests(unittest.TestCase):
+    def test_portrait_contained_without_mutation(self):
+        from skn_app.presentation import preview_thumbnail
+        original=Image.new('RGB',(600,1800),'white')
+        before=original.tobytes();preview=preview_thumbnail(original)
+        self.assertEqual(preview.size,(160,480));self.assertEqual(original.size,(600,1800))
+        self.assertEqual(original.tobytes(),before)
+
+    def test_landscape_contained(self):
+        from skn_app.presentation import preview_thumbnail
+        self.assertEqual(preview_thumbnail(Image.new('RGB',(2400,1200))).size,(960,480))
+
+    def test_small_image_not_upscaled(self):
+        from skn_app.presentation import preview_thumbnail
+        self.assertEqual(preview_thumbnail(Image.new('RGB',(80,60))).size,(80,60))
+
+    def test_export_keeps_original_dimensions(self):
+        from skn_app.presentation import preview_thumbnail
+        original=Image.new('RGB',(600,1800));preview_thumbnail(original)
+        view=build_image_result(original,[],display_thresholds('Balanced'))
+        self.assertEqual(Image.open(io.BytesIO(view['image_bytes'])).size,original.size)
+
+    def test_preview_invalid_size(self):
+        from skn_app.presentation import preview_thumbnail
+        with self.assertRaises(ValueError):preview_thumbnail(Image.new('RGB',(20,20)),(0,40))
