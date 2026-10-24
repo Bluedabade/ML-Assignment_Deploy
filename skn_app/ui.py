@@ -14,6 +14,7 @@ from .skincare_guidance import (SKINCARE_GUIDANCE, GENERAL_CARE, NUTRIENTS,
 PAGES = ('หน้าหลัก', 'ตรวจจับจากภาพ', 'ตรวจจับจากวิดีโอ', 'ผลการทดสอบโมเดล', 'เกี่ยวกับโครงงาน', 'คำแนะนำการใช้งาน')
 THAI = dict(zip(CLASSES, ('สิว', 'ริ้วรอย', 'จุดด่างดำ', 'รูขุมขนกว้าง')))
 PROFILE_LABELS = {'Balanced': 'สมดุล', 'Precision-focused': 'เน้นความแม่นยำของผลที่แสดง'}
+THEME_LABELS = {'system':'ตามระบบ', 'light':'☀ สว่าง', 'dark':'☾ มืด'}
 DISCLAIMER = 'ระบบนี้เป็นเครื่องมือสาธิตด้านการเรียนรู้ของเครื่อง ไม่ใช่เครื่องมือวินิจฉัยโรคหรือประเมินสุขภาพผิวทางการแพทย์'
 COLUMNS = {'class_name': 'ประเภท', 'confidence': 'ความเชื่อมั่น', 'timestamp_seconds': 'เวลาในวิดีโอ (วินาที)',
            'detections': 'จำนวนตำแหน่ง', 'x1': 'พิกัดซ้าย', 'y1': 'พิกัดบน', 'x2': 'พิกัดขวา', 'y2': 'พิกัดล่าง'}
@@ -92,6 +93,27 @@ def service(environment):
         return LocalAdapter()
     from .cloud_adapter import CloudAdapter
     return CloudAdapter(lambda name: st.secrets[name])
+
+
+def appearance_css(choice):
+    """Trusted session preference only; never interpolate uploaded content into CSS."""
+    palettes = {
+        'light': '--surface:#fff;--ink:#1F2937;--muted:#536579;--line:#dce5ef;--canvas:#F5F8FC;--teal:#0D9488;color-scheme:light;',
+        'dark': '--surface:#152638;--ink:#edf4fc;--muted:#bac9da;--line:#334b63;--canvas:#0d1927;--teal:#5eead4;color-scheme:dark;',
+    }
+    if choice not in THEME_LABELS:choice = 'system'
+    tokens = ':root{'+palettes[choice]+'}' if choice in palettes else ''
+    return '<style>'+tokens+'''
+    .stApp,[data-testid="stSidebar"]{color:var(--ink)}
+    [data-testid="stExpander"] summary,[data-testid="stExpander"] details,
+    [data-testid="stAlertContainer"], [role="listbox"], [role="option"],
+    [data-testid="stSelectbox"] input,[data-testid="stNumberInput"] input{
+        background:var(--surface)!important;color:var(--ink)!important}
+    [data-testid="stAlertContainer"] p,[data-testid="stExpander"] summary p,
+    [data-testid="stFileUploader"] p,[data-testid="stCaptionContainer"] p{color:var(--ink)!important}
+    [data-testid="stButtonGroup"] button{background:var(--surface);color:var(--ink);border-color:var(--line)}
+    [data-testid="stButtonGroup"] button[aria-pressed="true"]{background:#0f766e;color:white;border-color:#5eead4}
+    </style>'''
 
 
 def navigate(page):
@@ -428,6 +450,7 @@ def detection(kind, environment):
 def main():
     st.set_page_config(page_title='ระบบตรวจจับปัญหาผิว · SKN-1', page_icon='🔬', layout='wide')
     st.markdown(CSS, unsafe_allow_html=True)  # Fixed trusted markup only; never interpolate uploads.
+    st.markdown(appearance_css(st.session_state.get('appearance','system')), unsafe_allow_html=True)
     environment = mode()
     get_image_cache(st.session_state, now=time.time())
     if time.time()-st.session_state.get('result_time', 0) > LIMITS.result_ttl_seconds:
@@ -435,6 +458,8 @@ def main():
     with st.sidebar:
         st.markdown('### ◈ วิเคราะห์ผิวด้วย AI')
         st.caption('SKN-1 · โครงงานการเรียนรู้ของเครื่อง')
+        st.segmented_control('สีหน้าจอ', list(THEME_LABELS), format_func=THEME_LABELS.get,
+            default='system', selection_mode='single', key='appearance', width='stretch')
         page = st.radio('เมนูหลัก', PAGES, key='navigation')
         st.divider()
         st.caption('การเปิดหน้าเว็บยังไม่โหลดโมเดล การตรวจจับเริ่มเมื่อกดปุ่มเท่านั้น')

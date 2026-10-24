@@ -27,6 +27,10 @@ def check():
         if len(app.radio) != 1 or len(app.radio[0].options) != 6:
             raise RuntimeError('INITIAL_UI_CONTROLS_MISSING')
         from skn_app.ui import PAGES, THAI, PROFILE_LABELS, display_rows
+        for theme in ('dark', 'light', 'system'):
+            app.session_state['appearance'] = theme
+            app.run()
+            if app.exception:raise RuntimeError('THEME_SWITCH_FAILED')
         for page in PAGES:
             app.radio[0].set_value(page).run()
             if app.exception:raise RuntimeError('NAVIGATION_RENDER_FAILED')
