@@ -43,6 +43,20 @@ button{border-radius:12px!important;transition:box-shadow .15s}button:hover{box-
 [data-testid="stSidebar"] a{color:var(--teal)}
 [data-testid="stHeader"]{background:var(--surface);color:var(--ink)}
 [data-testid="stHeader"] button,[data-testid="stSidebar"] button{color:var(--ink)}
+/* Keep native Streamlit sidebar controls visible; only their appearance changes. */
+[data-testid="stSidebarCollapseButton"]{opacity:1!important;visibility:visible!important}
+[data-testid="stSidebarCollapseButton"] button,[data-testid="stExpandSidebarButton"]{
+  min-width:88px;min-height:44px;padding:8px 12px!important;gap:6px;
+  background:#0D9488!important;color:#fff!important;border:2px solid #5eead4!important;
+  border-radius:12px!important;opacity:1!important;visibility:visible!important;
+  box-shadow:0 3px 10px #0003;font-weight:600}
+[data-testid="stSidebarCollapseButton"] button [data-testid="stIconMaterial"],
+[data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"]{color:#fff!important;font-size:24px}
+[data-testid="stSidebarCollapseButton"] button::after{content:'ซ่อนเมนู';font-size:14px;white-space:nowrap}
+[data-testid="stExpandSidebarButton"]::after{content:'เมนู';font-size:14px;white-space:nowrap}
+[data-testid="stSidebarCollapseButton"] button:hover,[data-testid="stExpandSidebarButton"]:hover{background:#0f766e!important}
+[data-testid="stSidebarCollapseButton"] button:focus-visible,[data-testid="stExpandSidebarButton"]:focus-visible{
+  outline:3px solid #fbbf24!important;outline-offset:3px}
 [data-testid="stBaseButton-secondary"],[data-testid="stBaseButton-secondaryFormSubmit"]{background:var(--surface);color:var(--ink);border-color:var(--line)}
 [data-testid="stFileUploaderDropzone"]{background:var(--surface);color:var(--ink);border:1px dashed var(--line)}
 [data-testid="stFileUploaderDropzone"] small{color:var(--muted)}
