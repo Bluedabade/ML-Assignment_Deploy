@@ -33,7 +33,9 @@ def check():
         app.radio[0].set_value(PAGES[0]).run()
         next(button for button in app.button if button.label == 'เริ่มตรวจจับจากภาพ').click().run()
         if app.session_state['navigation'] != PAGES[1]:raise RuntimeError('HERO_NAVIGATION_FAILED')
-        if len(app.selectbox) != 1:raise RuntimeError('PROFILE_CONTROL_MISSING')
+        # Image display controls live in the result fragment only after inference.
+        if len(app.selectbox) != 0:raise RuntimeError('IMAGE_CONTROLS_BEFORE_INFERENCE')
+        app.radio[0].set_value(PAGES[2]).run()
         if app.selectbox[0].options != list(PROFILE_LABELS.values()):raise RuntimeError('THAI_PROFILE_LABELS_FAILED')
         rows = [{'class_name':'acne','confidence':.8,'x1':1}]
         translated = display_rows(rows)
@@ -61,6 +63,26 @@ results_view(result,'image')
         rendered.button[0].click().run()
         if rendered.session_state['upload_generation'] != 1:
             raise RuntimeError('CLEAR_SESSION_FAILED')
+        pore_fixture = '''
+import io
+from PIL import Image
+from skn_app.ui import results_view
+from skn_app.media import csv_bytes
+output=io.BytesIO();Image.new('RGB',(64,48),'teal').save(output,format='PNG')
+rows=[dict(class_name='enlarged_pore',confidence=.35,x1=20.,y1=20.,x2=40.,y2=40.)]
+result=dict(counts=dict(acne=0,wrinkle=0,dark_spot=0,enlarged_pore=1),
+ predictions=rows,image_bytes=output.getvalue(),csv_bytes=csv_bytes(rows),inference_seconds=.01)
+results_view(result,'image')
+'''
+        pore_view = AppTest.from_string(pore_fixture).run()
+        if pore_view.exception or pore_view.metric[3].label != THAI['enlarged_pore'] or pore_view.metric[3].value != '1 ตำแหน่ง':
+            raise RuntimeError('PORE_METRIC_RENDER_FAILED')
+        if pore_view.dataframe[0].value.iloc[0]['ประเภท'] != THAI['enlarged_pore']:
+            raise RuntimeError('PORE_TABLE_RENDER_FAILED')
+        if pore_view.dataframe[0].value.iloc[0]['ความเชื่อมั่น'] != '35.0%':
+            raise RuntimeError('PORE_CONFIDENCE_RENDER_FAILED')
+        if not any('คล้ายรูขุมขนกว้าง' in node.label for node in pore_view.expander):
+            raise RuntimeError('PORE_GUIDANCE_RENDER_FAILED')
         from skn_app.skincare_guidance import (MEDICAL_DISCLAIMER, NUTRITION_DISCLAIMER,
             NO_DETECTION_MESSAGE, SKINCARE_GUIDANCE)
         from skn_app import ui
@@ -80,6 +102,39 @@ results_view(result,'image')
                 if showcase:
                     if 'ข้อมูลสาธิตเท่านั้น' not in text or SKINCARE_GUIDANCE['acne']['description'] in text:
                         raise RuntimeError('SHOWCASE_CLAIMS_REAL_DETECTION')
+            adapter.assert_not_called()
+        interactive_fixture = '''
+import io,time
+from PIL import Image
+import streamlit as st
+from skn_app.ui import interactive_image_results
+from skn_app.presentation import make_image_cache,CACHE_SLOT
+output=io.BytesIO();Image.new('RGB',(120,80),'white').save(output,format='PNG')
+data=output.getvalue()
+rows=[dict(class_name='enlarged_pore',confidence=c,x1=x,y1=25.,x2=x+20.,y2=50.) for c,x in ((.15,10.),(.35,60.))]
+if CACHE_SLOT not in st.session_state:
+ st.session_state[CACHE_SLOT]=make_image_cache(data,dict(candidates=rows,inference_seconds=.01,model_loads=0),time.time())
+interactive_image_results(st.session_state[CACHE_SLOT]['key'])
+'''
+        with patch.object(ui, 'service', side_effect=forbid_model) as adapter:
+            interactive = AppTest.from_string(interactive_fixture).run()
+            if interactive.exception or interactive.metric[3].value != '1 ตำแหน่ง':
+                raise RuntimeError('INTERACTIVE_BASELINE_FAILED')
+            interactive.selectbox[0].set_value('Custom').run()
+            interactive.slider[0].set_value(10).run()
+            if interactive.exception or interactive.metric[3].value != '2 ตำแหน่ง' or not interactive.warning:
+                raise RuntimeError('INTERACTIVE_LOW_THRESHOLD_FAILED')
+            interactive.slider[0].set_value(90).run()
+            if interactive.exception or interactive.metric[3].value != '0 ตำแหน่ง':
+                raise RuntimeError('INTERACTIVE_HIGH_THRESHOLD_FAILED')
+            interactive.slider[1].set_value(10).run()
+            interactive.selectbox[1].set_value('none').run()
+            interactive.selectbox[0].set_value('Precision-focused').run()
+            if interactive.exception or interactive.metric[3].value != '1 ตำแหน่ง':
+                raise RuntimeError('INTERACTIVE_PROFILE_FAILED')
+            next(b for b in interactive.button if b.label == 'รีเซ็ตการแสดงผล').click().run()
+            if interactive.exception or interactive.selectbox[0].value != 'Balanced':
+                raise RuntimeError('INTERACTIVE_RESET_FAILED')
             adapter.assert_not_called()
         loader.assert_not_called()
     if any(n == 'inference_models' or n.startswith('inference_models.') for n in sys.modules):
@@ -113,7 +168,8 @@ results_view(result,'image')
         except subprocess.TimeoutExpired:process.kill();process.wait(timeout=5)
     return {'status': 'STREAMLIT_STARTUP_PASSED', 'initial_ui_rendered': True, 'thai_pages_checked': 6, 'hero_navigation': True,
             'localhost_health_passed': True, 'sdk_imported': False, 'model_load_calls': 0,
-            'guidance_cases_checked': 8, 'cloud_inference_verified': False}
+            'guidance_cases_checked': 8, 'enlarged_pore_result_checked': True,
+            'interactive_controls_verified': True, 'cloud_inference_verified': False}
 
 
 if __name__ == '__main__':

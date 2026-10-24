@@ -61,13 +61,16 @@ def csv_bytes(rows):
 
 def process_image(data, runtime, profile):
     if profile not in PROFILES:raise AppError('INPUT_INVALID')
+    from .presentation import filter_detections
     image = decode_image(data)
     runtime.load();guard_memory()
-    rows, seconds = runtime.predict(image, profile)
+    candidates, seconds = runtime.predict_candidates(image)
+    rows = filter_detections(candidates, PROFILES[profile])
     output = io.BytesIO();annotate(image, rows).save(output, format='PNG')
     return dict(predictions=rows, counts={c: sum(r['class_name']==c for r in rows) for c in CLASSES},
         inference_seconds=seconds, width=image.width, height=image.height, image_bytes=output.getvalue(),
-        csv_bytes=csv_bytes([dict(r, timestamp_seconds=0.) for r in rows]))
+        csv_bytes=csv_bytes([dict(r, timestamp_seconds=0.) for r in rows]), candidates=candidates,
+        candidate_stage='POST_NMS_CAP_MAPPING_GEOMETRY')
 
 
 def video_metadata(path):

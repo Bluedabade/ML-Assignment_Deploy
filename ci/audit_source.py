@@ -28,6 +28,7 @@ skn_app/config.py
 skn_app/errors.py
 skn_app/local_adapter.py
 skn_app/media.py
+skn_app/presentation.py
 skn_app/resources.py
 skn_app/runtime.py
 skn_app/secrets.py
@@ -43,6 +44,7 @@ ci/startup_smoke.py
 tests/test_skn_app.py
 tests/test_ci_safety.py
 tests/test_skincare_guidance.py
+tests/test_interactive.py
 docs/LICENSING.md
 docs/LICENSE_PERMISSION_REQUEST.md
 '''.split())

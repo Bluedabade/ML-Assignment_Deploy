@@ -42,12 +42,44 @@ def synthetic_video(folder, seconds=2):
 class FakeRuntime:
     def __init__(self):self.loads=0;self.calls=0
     def load(self):self.loads+=1
+    def predict_candidates(self,image):return self.predict(image,'Balanced')
     def predict(self,image,profile):
         self.calls+=1
         return [dict(class_name='acne',confidence=.8,x1=1.,y1=2.,x2=10.,y2=12.)],.01
 
 
 class AppTests(unittest.TestCase):
+    def test_sdk_open_pores_id6_survives_both_profiles_and_exports(self):
+        # Synthetic output only: this proves software plumbing, not model ability.
+        names = ['Acne','Black Heads','Dark Circles','Dark Spots','Dry Skin',
+                 'Oily Skin','Open Pores','Red Skin','Wrinkles']
+        calls = []
+        class Model:
+            class_names = names
+            def __call__(self, frame, **settings):
+                calls.append(settings)
+                return [types.SimpleNamespace(class_id=np.array([6]),confidence=np.array([.35]),
+                                              xyxy=np.array([[20.,20.,40.,40.]]))]
+        runtime = ModelRuntime('cloud', lambda: (_ for _ in ()).throw(AssertionError('NO_AUTH_IN_UNIT_TEST')))
+        runtime.model = Model()
+        try:
+            with patch('skn_app.media.guard_memory'):
+                for profile in ('Balanced','Precision-focused'):
+                    result = process_image(image_bytes(),runtime,profile)
+                    self.assertEqual(result['counts'],dict(acne=0,wrinkle=0,dark_spot=0,enlarged_pore=1))
+                    self.assertEqual(result['predictions'][0]['class_name'],'enlarged_pore')
+                    self.assertAlmostEqual(result['predictions'][0]['confidence'],.35)
+                    self.assertEqual(result['csv_bytes'].decode('utf-8-sig').splitlines()[0],
+                                     'timestamp_seconds,class_name,confidence,x1,y1,x2,y2')
+                    self.assertIn('enlarged_pore',result['csv_bytes'].decode('utf-8-sig'))
+                    with Image.open(io.BytesIO(result['image_bytes'])) as image:
+                        self.assertEqual(image.getpixel((20,30)),(41,199,201))
+            self.assertEqual(runtime.model_loads,0)
+            self.assertEqual(len(calls),2)
+            for settings in calls:
+                self.assertEqual(settings,dict(confidence=.001,iou_threshold=.3,max_detections=300,class_agnostic_nms=False))
+        finally:runtime.close()
+
     def test_images_are_decoded_by_content_not_filename(self):
         for fmt in ('PNG','JPEG'):self.assertEqual(decode_image(image_bytes(fmt)).size,(64,48))
         for data in (b'not an image',image_bytes('GIF')):

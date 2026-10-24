@@ -208,3 +208,28 @@ PyAV ใช้ libx264 ของ Wheel ไม่ต้องมี ffmpeg execut
 - เพิ่ม Allowlist อย่างเจาะจง 2 ไฟล์: `skn_app/skincare_guidance.py` และ `tests/test_skincare_guidance.py` รวม Source ที่อนุญาต 37 ไฟล์ และ SHA256 36 รายการใน Manifest ไม่เปลี่ยนข้อห้าม Secrets/Weights/Media/Dataset
 - `python -B -m ci.run_synthetic` ตรวจการเลือกหัวข้อ ความครบถ้วน ข้อความความปลอดภัย และ CSV ส่วน `python -B -m ci.startup_smoke` ตรวจการแสดงผลจริงผ่าน Streamlit AppTest โดยไม่โหลดโมเดล
 - รอบนี้เป็นการพัฒนาและทดสอบ Local เท่านั้น ยังต้องได้รับอนุญาตใหม่ก่อน Commit/Push/Deploy และต้องตรวจบน Cloud จริงภายหลัง
+
+## การปรับผลภาพแบบ Interactive (SKN-INTERACTIVE-1)
+
+ภาพเรียก SKN-1 หนึ่งครั้งเพื่อเก็บ Candidates **หลัง SDK NMS/cap, Mapping และ Geometry validation** ไม่ใช่กล่องก่อน NMS เก็บตั้งแต่ SDK confidence floor 0.001; NMS 0.30, cap 300, preprocessing, provider, weights identity และ security flags เดิมทั้งหมด
+
+`ModelRuntime.predict_candidates()` ใช้เส้นทาง SDK เดิม ส่วน `predict(image, profile)` รักษาพฤติกรรมวิดีโอเดิม `process_image()` ส่ง `candidates` เพิ่มใน Result JSON โดย Local worker/adapter และ Cloud adapter เดิมส่งต่อข้อมูลนี้ได้ ไม่เพิ่ม operation ใหม่หรือส่งภาพไปบริการภายนอก
+
+`skn_app/presentation.py` แยกการกรอง นับ วาด RGBA และสร้าง PNG/CSV ออกจากโมเดล UI ใช้ `st.fragment` สำหรับผลภาพ ทั้งโปรไฟล์และ Slider อยู่ภายใน Fragment ไม่มีการเรียก service ระหว่างปรับผล:
+
+- สมดุลและเน้นความแม่นยำใช้ Per-class thresholds ใน Config เดิมทุกค่า
+- กำหนดเกณฑ์เองใช้ Global 10–90% ทีละ 1% ค่าเริ่มต้น 25%
+- ความเข้มกรอบ 10–100% ค่าเริ่มต้น 65% ปรับเฉพาะ Alpha ของกรอบ ข้อความยังอ่านชัด
+- ชื่อและเปอร์เซ็นต์ / เปอร์เซ็นต์ / ซ่อนข้อความ ใช้ฟอนต์ Pillow ที่มีอยู่ บนภาพคงชื่ออังกฤษและมี Legend ภาษาไทย ไม่ดาวน์โหลดฟอนต์ในเส้นทาง Inference
+- Native slider อัปเดตหลังยืนยันค่าหรือปล่อยเมาส์ ไม่รับรองว่าจะวาดต่อเนื่องทุกเฟรมระหว่างลาก ไม่มี Custom JS/CDN/Frontend framework เพิ่ม
+- ต่ำกว่า 20% แสดงคำเตือนว่าเหมาะกับการสำรวจและอาจมีผลผิดจำนวนมาก การเพิ่มจำนวนกล่องไม่ได้แปลว่าแม่นยำขึ้น
+
+Candidates และ Original compressed upload อยู่เฉพาะ `st.session_state` ของผู้ใช้ Cache key ผูกกับ SHA256 ของไฟล์, model/weights identity, SDK configuration, preprocessing version และชนิดข้อมูล ไม่รวม Threshold/Opacity/ข้อความ ไม่มี Global cache ของภาพ ไม่เก็บภาพถาวร และไม่เก็บ Rendered PNG หลายชุดใน Session
+
+Cache หมดอายุ 600 วินาทีจาก Inference ไม่ต่ออายุเพราะเลื่อน Slider ตรวจ TTL ทุก App/Fragment interaction เช่นพฤติกรรมเดิม ไม่ใช่ตัวล้างหน่วยความจำตามนาฬิกาขณะหน้าเว็บไม่มีการโต้ตอบ เปลี่ยนไฟล์/ล้าง Session จะยกเลิก Cache เก่า ผลที่หมดอายุจะไม่ถูกนำกลับมาแสดง
+
+PNG preview/download, CSV, ตาราง, Counts และ Guidance สร้างจาก Filtered rows ชุดเดียวกัน CSV schema เดิม การ Download ไม่เรียก Inference ซ้ำ แคชนี้ยังจำกัดด้วย NMS/cap เดิมและไม่สามารถกู้กล่องที่ถูก Suppress/ตัดออกได้
+
+วิดีโอคง MP4 / 1 เฟรมตัวอย่างต่อวินาที / สูงสุด 12 วินาที / H.264 และโปรไฟล์เดิม ไม่มี Interactive Slider ของวิดีโอในรุ่นนี้ การเปลี่ยน Video profile ยกเลิกผลเดิมและต้องกดเริ่มงานใหม่เอง ไม่มีการรันโมเดลอัตโนมัติขณะเปลี่ยนค่า
+
+เพิ่ม Source allowlist เฉพาะ `skn_app/presentation.py` และ `tests/test_interactive.py` รวม 39 ไฟล์และ Manifest 38 Hashes ไม่ลดกฎป้องกัน Secrets/Media/Weights/Dataset รอบนี้ยังไม่ Commit/Push/Deploy; ต้องตรวจ Linux CI และ Cloud runtime ใหม่หลังได้รับอนุญาต

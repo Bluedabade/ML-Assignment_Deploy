@@ -129,6 +129,13 @@ class ModelRuntime:
     def predict(self, image, profile):
         if profile not in PROFILES:
             raise AppError('INPUT_INVALID')
+        return self._predict(image, profile)
+
+    def predict_candidates(self, image):
+        """Post-NMS/cap canonical valid boxes at SDK floor, not pre-NMS predictions."""
+        return self._predict(image)
+
+    def _predict(self, image, profile=None):
         self.load()
         import numpy as np
         # Shared pipeline supplies EXIF-normalized RGB; SKN expects BGR ndarray.
@@ -143,7 +150,7 @@ class ModelRuntime:
         rows = []
         for cid, confidence, box in zip(output.class_id.tolist(), output.confidence.tolist(), output.xyxy.tolist()):
             label = MAPPING.get(self.model.class_names[int(cid)])
-            if label is None or confidence < PROFILES[profile][label]:
+            if label is None or (profile is not None and confidence < PROFILES[profile][label]):
                 continue
             if not np.isfinite([confidence, *box]).all() or not .001 <= confidence <= 1:
                 raise AppError('INFERENCE_FAILED')
