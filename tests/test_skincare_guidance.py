@@ -99,4 +99,69 @@ class GuidanceTests(unittest.TestCase):
         self.assertEqual(counts, before)
 
 
+class ConcernTests(unittest.TestCase):
+    def test_two_independent_sources(self):
+        from skn_app.skincare_guidance import guidance_origins
+        self.assertEqual(guidance_origins({'acne':2},['wrinkle']),{'acne':'ai','wrinkle':'user'})
+
+    def test_no_detection_user_can_select(self):
+        from skn_app.skincare_guidance import guidance_origins
+        self.assertEqual(guidance_origins({},['acne']),{'acne':'user'})
+
+    def test_multiple_and_duplicate_topics(self):
+        from skn_app.skincare_guidance import guidance_origins
+        self.assertEqual(guidance_origins({'acne':1},['acne','wrinkle','wrinkle','enlarged_pore']),
+            {'acne':'both','wrinkle':'user','enlarged_pore':'user'})
+
+    def test_other_is_not_model_class(self):
+        from skn_app.skincare_guidance import OTHER_CONCERN,selected_concerns,guidance_origins
+        self.assertEqual(selected_concerns([OTHER_CONCERN]),(OTHER_CONCERN,))
+        self.assertEqual(guidance_origins({},[OTHER_CONCERN]),{})
+        self.assertNotIn(OTHER_CONCERN,CLASSES)
+
+    def test_unknown_and_empty_inputs(self):
+        from skn_app.skincare_guidance import selected_concerns
+        for item in (None,'acne',{},[],['unknown'],['normal_skin']):self.assertEqual(selected_concerns(item),())
+
+    def test_results_and_exports_unchanged(self):
+        from skn_app.skincare_guidance import guidance_origins
+        result={'counts':{'acne':2},'predictions':[dict(class_name='acne',confidence=.5,x1=1,y1=2,x2=3,y2=4)]}
+        before=copy.deepcopy(result);export=csv_bytes(result['predictions'])
+        guidance_origins(result['counts'],['wrinkle','dark_spot'])
+        self.assertEqual(result,before);self.assertEqual(csv_bytes(result['predictions']),export)
+
+    def test_confidence_changes_only_ai_topics(self):
+        from skn_app.skincare_guidance import guidance_origins
+        selected=['wrinkle']
+        self.assertEqual(guidance_origins({'acne':1},selected),{'acne':'ai','wrinkle':'user'})
+        self.assertEqual(guidance_origins({},selected),{'wrinkle':'user'})
+        self.assertEqual(selected,['wrinkle'])
+
+    def test_context_never_claims_user_selection_is_detection(self):
+        from skn_app.skincare_guidance import context_intro,CONCERN_DISCLAIMER
+        for name in CLASSES:
+            self.assertTrue(context_intro(name,'user').startswith('คุณเลือกศึกษา'))
+            self.assertNotIn('ระบบ AI พบ',context_intro(name,'user'))
+        self.assertIn('ผู้ใช้เลือกศึกษาด้วยตนเอง',CONCERN_DISCLAIMER)
+        self.assertIn('ไม่ใช่การวินิจฉัยโรค',CONCERN_DISCLAIMER)
+
+    def test_showcase_does_not_claim_ai_origin(self):
+        from skn_app.skincare_guidance import guidance_origins
+        self.assertEqual(guidance_origins({'acne':1},['wrinkle'],showcase=True),{'wrinkle':'user'})
+
+    def test_per_file_per_kind_session_binding(self):
+        from skn_app.skincare_guidance import concern_session_key,clear_concerns
+        state={};key=concern_session_key(state,'image','file1');state[key]=['wrinkle']
+        self.assertEqual(concern_session_key(state,'image','file1'),key);self.assertEqual(state[key],['wrinkle'])
+        video=concern_session_key(state,'video','file1');state[video]=['acne']
+        self.assertNotEqual(key,video)
+        concern_session_key(state,'image','file2');self.assertNotIn(key,state);self.assertEqual(state[video],['acne'])
+        clear_concerns(state);self.assertEqual(state,{})
+
+    def test_session_isolation(self):
+        from skn_app.skincare_guidance import concern_session_key
+        first={};second={};a=concern_session_key(first,'image','same');first[a]=['acne']
+        concern_session_key(second,'image','same');self.assertNotIn(a,second)
+
+
 if __name__ == '__main__':unittest.main()

@@ -8,12 +8,54 @@ from numbers import Real
 
 from .config import CLASSES
 
-CONTENT_VERSION = '2026-10-24.1'
-MEDICAL_DISCLAIMER = 'คำแนะนำนี้จัดทำขึ้นเพื่อให้ความรู้เบื้องต้นตามลักษณะที่ระบบ AI ตรวจพบ ไม่ใช่การวินิจฉัยโรค การประเมินภาวะขาดสารอาหาร หรือคำแนะนำการรักษาเฉพาะบุคคล หากมีอาการผิดปกติ รุนแรง หรือกังวลเกี่ยวกับสุขภาพผิว ควรปรึกษาแพทย์ผิวหนัง'
+CONTENT_VERSION = '2026-10-25.1'
+MEDICAL_DISCLAIMER = 'คำแนะนำนี้จัดทำขึ้นเพื่อให้ความรู้เบื้องต้นตามหัวข้อที่ระบบ AI ตรวจพบหรือผู้ใช้เลือกศึกษาด้วยตนเอง ไม่ใช่การวินิจฉัยโรค การประเมินภาวะขาดสารอาหาร หรือคำแนะนำการรักษาเฉพาะบุคคล หากมีอาการผิดปกติ รุนแรง หรือกังวลเกี่ยวกับสุขภาพผิว ควรปรึกษาแพทย์ผิวหนัง'
 NUTRITION_DISCLAIMER = 'ระบบไม่สามารถระบุได้ว่าร่างกายขาดวิตามินหรือสารอาหารใดจากภาพใบหน้า ข้อมูลนี้เป็นเพียงคำแนะนำด้านโภชนาการทั่วไป ไม่ใช่ผลการประเมินภาวะโภชนาการ'
 NO_DETECTION_MESSAGE = 'ระบบไม่พบลักษณะปัญหาผิวที่ผ่านเกณฑ์การตรวจจับ คุณสามารถศึกษาคำแนะนำการดูแลผิวทั่วไปได้ แต่ผลนี้ไม่ได้ยืนยันว่าผิวไม่มีปัญหา'
 RETINOID_CAUTION = 'ห้ามใช้ Retinol / Retinoids ระหว่างตั้งครรภ์หรือวางแผนตั้งครรภ์ หากให้นมบุตรหรือไม่แน่ใจ ควรปรึกษาแพทย์หรือเภสัชกรก่อนใช้'
 INGREDIENT_CAUTION = 'รายชื่อสารเป็นข้อมูลเพื่อการศึกษา ไม่ใช่ชุดรักษาที่ต้องใช้ร่วมกัน ไม่ควรเริ่มสารออกฤทธิ์หลายชนิดพร้อมกัน และควรอ่านฉลากหรือปรึกษาผู้เชี่ยวชาญก่อนใช้'
+CONCERN_DISCLAIMER = 'ข้อมูลการดูแลผิวนี้จัดทำขึ้นเพื่อการศึกษา โดยอ้างอิงหัวข้อที่ระบบ AI ตรวจพบหรือผู้ใช้เลือกศึกษาด้วยตนเอง ไม่ใช่การวินิจฉัยโรค การยืนยันปัญหาผิว หรือคำแนะนำการรักษาเฉพาะบุคคล'
+OTHER_CONCERN = 'other_unsure'  # Presentation option only; never a model class.
+CONCERN_OPTIONS = (*CLASSES, OTHER_CONCERN)
+CONCERN_NAMES = dict(zip(CLASSES, ('สิว', 'ริ้วรอย', 'จุดด่างดำ', 'รูขุมขนกว้าง')))
+
+
+def selected_concerns(values):
+    """Ignore unsupported input safely, retaining canonical order and no duplicates."""
+    if not isinstance(values, (list, tuple, set, frozenset)):return ()
+    return tuple(name for name in CONCERN_OPTIONS if name in values)
+
+
+def guidance_origins(counts, concerns=(), *, showcase=False):
+    detected = () if showcase else detected_classes(counts)
+    chosen = selected_concerns(concerns)
+    return {name: ('both' if name in detected and name in chosen else
+                   'ai' if name in detected else 'user')
+            for name in CLASSES if name in detected or name in chosen}
+
+
+def context_intro(name, origin):
+    label = CONCERN_NAMES.get(name)
+    if label is None or origin not in ('ai', 'user', 'both', 'showcase'):return ''
+    if origin == 'showcase':return f'ตัวอย่างข้อมูลความรู้เกี่ยวกับ{label} ไม่ใช่ผลวิเคราะห์ภาพจริง'
+    if origin == 'user':return f'คุณเลือกศึกษาข้อมูลเกี่ยวกับ{label} แม้ระบบ AI อาจไม่ได้ตรวจพบลักษณะดังกล่าว ข้อมูลต่อไปนี้เป็นคำแนะนำการดูแลผิวเบื้องต้น'
+    return f'ระบบ AI พบลักษณะภาพที่สอดคล้องกับ{label} คำแนะนำต่อไปนี้เป็นข้อมูลทั่วไป ไม่ใช่การวินิจฉัย'
+
+
+def concern_session_key(state, kind, identity):
+    """Bind selections to one active file per input kind, without storing media."""
+    if kind not in ('image', 'video', 'showcase'):raise ValueError('INVALID_CONCERN_SCOPE')
+    key, marker = 'care-'+kind, '_care_identity_'+kind
+    if marker not in state or state[marker] != identity:
+        state.pop(key, None)
+        state[marker] = identity
+    return key
+
+
+def clear_concerns(state, kind=None):
+    for item in (('image','video','showcase') if kind is None else (kind,)):
+        state.pop('care-'+item, None)
+        state.pop('_care_identity_'+item, None)
 
 AAD = 'https://www.aad.org/public/'
 RETINOID_REFERENCE = ('ข้อมูลเรื่อง Retinol และ Retinoids จากสมาคมแพทย์ผิวหนังสหรัฐฯ', AAD+'everyday-care/skin-care-secrets/anti-aging/retinoid-retinol')

@@ -91,6 +91,20 @@ results_view(result,'image')
             NO_DETECTION_MESSAGE, SKINCARE_GUIDANCE)
         from skn_app import ui
         with patch.object(ui, 'service', side_effect=forbid_model) as adapter:
+            for kind in ('image','video'):
+                fixture = ('from skn_app.ui import skincare_guidance_view\n'
+                    f"skincare_guidance_view({{}},input_kind={kind!r},identity='fixture-file')")
+                concern_view = AppTest.from_string(fixture).run()
+                if concern_view.exception or concern_view.multiselect[0].value:
+                    raise RuntimeError('CONCERN_DEFAULT_NOT_EMPTY')
+                concern_view.multiselect[0].set_value(['acne','wrinkle','other_unsure']).run()
+                text='\n'.join(str(n.value) for n in concern_view.markdown)
+                if concern_view.exception or 'คุณเลือกศึกษาข้อมูลเกี่ยวกับสิว' not in text:
+                    raise RuntimeError('CONCERN_IMAGE_VIDEO_FAILED')
+                if any('ระบบ AI พบลักษณะภาพ' in str(n.value) for n in concern_view.markdown):
+                    raise RuntimeError('USER_CONCERN_CLAIMS_AI_DETECTION')
+                concern_view.multiselect[0].set_value([]).run()
+                if concern_view.exception:raise RuntimeError('CONCERN_DESELECT_FAILED')
             for counts, showcase in [({'acne':1},False), ({'wrinkle':1},False),
                     ({'dark_spot':1},False), ({'enlarged_pore':1},False),
                     (dict.fromkeys(THAI,1),False), ({},False), ({'unknown':1},False), ({},True)]:
@@ -124,6 +138,10 @@ interactive_image_results(st.session_state[CACHE_SLOT]['key'])
             interactive = AppTest.from_string(interactive_fixture).run()
             if interactive.exception or interactive.metric[3].value != '1':
                 raise RuntimeError('INTERACTIVE_BASELINE_FAILED')
+            interactive.multiselect[0].set_value(['wrinkle','enlarged_pore']).run()
+            if interactive.exception or len([e for e in interactive.expander if 'คล้ายรูขุมขนกว้าง' in e.label]) != 1:
+                raise RuntimeError('CONCERN_DEDUP_FAILED')
+            concern_key = interactive.multiselect[0].key
             if interactive.slider[0].value != 25:raise RuntimeError('DEFAULT_SLIDER_MISSING')
             if not any(e.label=='ตั้งค่าขั้นสูง' for e in interactive.expander):raise RuntimeError('ADVANCED_MISSING')
             interactive.radio[0].set_value('ภาพต้นฉบับ').run()
@@ -135,6 +153,11 @@ interactive_image_results(st.session_state[CACHE_SLOT]['key'])
             interactive.slider[0].set_value(90).run()
             if interactive.exception or interactive.metric[3].value != '0':
                 raise RuntimeError('INTERACTIVE_HIGH_THRESHOLD_FAILED')
+            if interactive.multiselect[0].value != ['wrinkle','enlarged_pore']:
+                raise RuntimeError('CONCERNS_LOST_ON_THRESHOLD_CHANGE')
+            selected_text = '\n'.join(str(n.value) for n in interactive.markdown)
+            if 'คุณเลือกศึกษาข้อมูลเกี่ยวกับริ้วรอย' not in selected_text:
+                raise RuntimeError('USER_CONTEXT_MISSING')
             interactive.slider[1].set_value(10).run()
             interactive.selectbox[1].set_value('none').run()
             interactive.selectbox[0].set_value('Precision-focused').run()

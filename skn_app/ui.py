@@ -9,7 +9,9 @@ from .presentation import (CUSTOM, CACHE_SLOT, display_thresholds, candidate_cac
     make_image_cache, get_image_cache, build_image_result)
 from .skincare_guidance import (SKINCARE_GUIDANCE, GENERAL_CARE, NUTRIENTS,
     NUTRITION_REFERENCES, MEDICAL_DISCLAIMER, NUTRITION_DISCLAIMER,
-    INGREDIENT_CAUTION, NO_DETECTION_MESSAGE, guidance_topics)
+    INGREDIENT_CAUTION, NO_DETECTION_MESSAGE, guidance_topics, CONCERN_DISCLAIMER,
+    CONCERN_OPTIONS, OTHER_CONCERN, selected_concerns, guidance_origins, context_intro,
+    concern_session_key, clear_concerns)
 
 PAGES = ('หน้าหลัก', 'ตรวจจับจากภาพ', 'ตรวจจับจากวิดีโอ', 'ผลการทดสอบโมเดล', 'เกี่ยวกับโครงงาน', 'คำแนะนำการใช้งาน')
 THAI = dict(zip(CLASSES, ('สิว', 'ริ้วรอย', 'จุดด่างดำ', 'รูขุมขนกว้าง')))
@@ -121,6 +123,7 @@ def navigate(page):
 
 
 def clear_media():
+    clear_concerns(st.session_state)
     for key in ('result', 'signature', 'result_time', 'image_verified', CACHE_SLOT):
         st.session_state.pop(key, None)
     st.session_state['upload_generation'] = st.session_state.get('upload_generation', 0)+1
@@ -202,43 +205,51 @@ def help_page():
     st.info(DISCLAIMER)
 
 
-def skincare_guidance_view(counts, *, showcase=False):
+def skincare_guidance_view(counts, *, showcase=False, input_kind='image', identity=None):
     """Static presentation only. Never calls service, SDK, or an external API."""
     with st.container(key='skincare-guidance'):
-        _skincare_guidance_content(counts, showcase=showcase)
+        _skincare_guidance_content(counts, showcase=showcase, input_kind=input_kind, identity=identity)
 
 
-def _skincare_guidance_content(counts, *, showcase=False):
+def _skincare_guidance_content(counts, *, showcase=False, input_kind='image', identity=None):
     st.subheader('ตัวอย่างคำแนะนำที่ระบบสามารถแสดงได้' if showcase else 'คำแนะนำการดูแลผิวเบื้องต้น')
     if showcase:
         st.caption('ข้อมูลสาธิตเท่านั้น ไม่ใช่ผลวิเคราะห์ภาพจริง และไม่ได้สร้างผลตรวจจับ')
     else:
-        st.caption('เลือกหัวข้อความรู้ตามประเภทที่ตรวจพบ ไม่ได้ปรับการรักษาหรือประเมินความรุนแรงจากจำนวนตำแหน่ง')
+        st.caption('อ่านข้อมูลจากผล AI หรือเลือกหัวข้อที่สนใจเพิ่มเติมได้ โดยผลตรวจจับจะไม่เปลี่ยน')
     st.info(MEDICAL_DISCLAIMER)
-    topics = guidance_topics(counts, showcase=showcase)
-    if not topics:
-        st.write(NO_DETECTION_MESSAGE)
+    st.caption(CONCERN_DISCLAIMER)
+    ai_topics = guidance_topics(counts) if not showcase else ()
+    ai_slot = st.container()
+    key = concern_session_key(st.session_state, 'showcase' if showcase else input_kind, identity)
+    with st.container(border=True):
+        st.markdown('#### มีปัญหาผิวอื่นที่คุณกังวลหรือไม่?')
+        st.caption('หากมีลักษณะปัญหาผิวที่คุณกังวล แต่ระบบตรวจไม่พบ สามารถเลือกหัวข้อที่ต้องการศึกษาเพิ่มเติมได้')
+        labels = dict(THAI, **{OTHER_CONCERN:'อื่น ๆ / ไม่แน่ใจ'})
+        concerns = selected_concerns(st.multiselect('เลือกหัวข้อที่คุณสนใจ', CONCERN_OPTIONS,
+            format_func=labels.get, key=key, placeholder='เลือกได้หลายหัวข้อ'))
+    origins = guidance_origins(counts, concerns, showcase=showcase)
+    with ai_slot:
+        if ai_topics:
+            st.markdown('#### ข้อมูลจากผล AI')
+            for name in ai_topics:_guidance_topic(name, origins[name])
+        elif not showcase:
+            st.write(NO_DETECTION_MESSAGE)
+    extras = tuple(name for name, origin in origins.items() if origin == 'user')
+    if extras or OTHER_CONCERN in concerns:
+        st.markdown('#### หัวข้อที่คุณเลือกศึกษาด้วยตนเอง')
+        st.caption('คำแนะนำเพิ่มเติมสำหรับคุณ · ผู้ใช้เลือกเอง ไม่ได้เพิ่มผลตรวจจับของ AI')
+        for name in extras:_guidance_topic(name, 'user')
+    if showcase:
+        for name in guidance_topics({}, showcase=True):
+            if name not in origins:_guidance_topic(name, 'showcase')
+    if (not ai_topics and not extras and not showcase) or OTHER_CONCERN in concerns:
         with st.container(border=True):
             st.markdown('#### การดูแลผิวทั่วไป')
+            if OTHER_CONCERN in concerns:st.caption('ผู้ใช้เลือกเอง · อื่น ๆ / ไม่แน่ใจ')
             for line in GENERAL_CARE:st.markdown(f'- {line}')
-    else:
-        st.caption(INGREDIENT_CAUTION)
-        if len(topics) > 1:st.caption('ตรวจพบหลายประเภทไม่ได้หมายความว่ามีโรคหลายชนิด และไม่ควรนำสารทุกชนิดด้านล่างมาใช้พร้อมกัน')
-        sections = (('daily_care', 'การดูแลผิวหน้า'),
-                    ('skincare_ingredients', 'ผลิตภัณฑ์และสารบำรุงที่ควรรู้จัก'),
-                    ('nutrition', 'อาหารและสารอาหาร'),
-                    ('exercise_lifestyle', 'การออกกำลังกายและการใช้ชีวิต'),
-                    ('cautions', 'ข้อควรระวัง'),
-                    ('when_to_seek_professional_care', 'เมื่อควรปรึกษาผู้เชี่ยวชาญ'))
-        for name in topics:
-            guidance = SKINCARE_GUIDANCE[name]
-            with st.expander(guidance['title_th'], expanded=len(topics) == 1):
-                st.write('ตัวอย่างข้อมูลความรู้สำหรับประเภทนี้' if showcase else guidance['description'])
-                for key, title in sections:
-                    st.markdown(f'#### {title}')
-                    for line in guidance[key]:st.markdown(f'- {line}')
-                st.markdown('**อ่านข้อมูลเพิ่มเติมจากแหล่งอ้างอิง**')
-                for title, url in guidance['references']:st.markdown(f'- [{title}]({url})')
+    st.caption(INGREDIENT_CAUTION)
+    if len(origins) > 1:st.caption('การเลือกหรือพบหลายหัวข้อไม่ได้หมายความว่ามีโรคหลายชนิด และไม่ควรรวมสารทุกชนิดเป็นชุดรักษา')
     # Shared once, rather than repeated as a supposed treatment for each detected class.
     st.caption(NUTRITION_DISCLAIMER)
     with st.expander('สารอาหารที่มีส่วนช่วยดูแลสุขภาพผิว'):
@@ -247,6 +258,23 @@ def _skincare_guidance_content(counts, *, showcase=False):
         st.caption('อาหารไม่ใช่สิ่งที่รับประกันว่าจะรักษาลักษณะผิวที่ตรวจพบได้ และระบบไม่แนะนำขนาดวิตามินหรือยาเฉพาะบุคคล')
         st.markdown('**อ่านข้อมูลเพิ่มเติมจากแหล่งอ้างอิง**')
         for title, url in NUTRITION_REFERENCES:st.markdown(f'- [{title}]({url})')
+
+
+def _guidance_topic(name, origin):
+    guidance = SKINCARE_GUIDANCE[name]
+    badges = {'ai':'AI ตรวจพบ', 'user':'ผู้ใช้เลือกเอง',
+              'both':'AI ตรวจพบ · ผู้ใช้สนใจเพิ่มเติม', 'showcase':'ข้อมูลสาธิตเพื่อการศึกษา'}
+    with st.expander(guidance['title_th']):
+        st.caption(badges[origin])
+        st.write(context_intro(name, origin))
+        for key, title in (('daily_care','การดูแลผิวหน้า'),
+            ('skincare_ingredients','ผลิตภัณฑ์และสารบำรุงที่ควรรู้จัก'), ('nutrition','อาหารและสารอาหาร'),
+            ('exercise_lifestyle','การออกกำลังกายและการใช้ชีวิต'), ('cautions','ข้อควรระวัง'),
+            ('when_to_seek_professional_care','เมื่อควรปรึกษาผู้เชี่ยวชาญ')):
+            st.markdown(f'#### {title}')
+            for line in guidance[key]:st.markdown(f'- {line}')
+        st.markdown('**อ่านข้อมูลเพิ่มเติมจากแหล่งอ้างอิง**')
+        for title, url in guidance['references']:st.markdown(f'- [{title}]({url})')
 
 
 def preview_image(image, caption):
@@ -281,7 +309,7 @@ def results_view(result, kind, *, allow_reset=True):
         st.caption(f"เวลาประมวลผลวิดีโอรวม {result.get('processing_seconds', 0):.2f} วินาที")
         st.download_button('ดาวน์โหลดวิดีโอผลลัพธ์', result['video_bytes'], 'skn_sampled.mp4', 'video/mp4', width='stretch')
     with st.expander('คำแนะนำการดูแลผิว'):
-        skincare_guidance_view(result['counts'])
+        skincare_guidance_view(result['counts'], input_kind=kind, identity=st.session_state.get('signature'))
     with st.expander('ตารางตำแหน่งตรวจจับ'):
         if result['predictions']:
             st.dataframe(display_rows(result['predictions']), hide_index=True, width='stretch')
@@ -314,6 +342,7 @@ def change_confidence(prefix):
 def _interactive_image_results(key):
     cache = get_image_cache(st.session_state, key, time.time())
     if cache is None:
+        clear_concerns(st.session_state, 'image')
         st.info('ผลตรวจจับหมดอายุหรือถูกล้าง กรุณากดเริ่มตรวจจับอีกครั้ง');return
     prefix = 'image-display-'+key+'-'
     st.session_state.setdefault(prefix+'mode','Balanced')
@@ -367,7 +396,7 @@ def _interactive_image_results(key):
         if view['predictions']:st.dataframe(display_rows(view['predictions']),hide_index=True,width='stretch')
         else:st.write('ไม่มีตำแหน่งที่ผ่านเกณฑ์')
     with st.expander('คำแนะนำการดูแลผิว'):
-        skincare_guidance_view(view['counts'])
+        skincare_guidance_view(view['counts'], input_kind='image', identity=key)
     with st.expander('รายละเอียดทางเทคนิค'):
         st.write('SKN-1 · ONNX CPU · NMS IoU 0.30 · สูงสุด 300 ตำแหน่ง · เก็บผลเฉพาะ Session 600 วินาที')
         st.caption('Candidates ผ่าน NMS และการจำกัดจำนวนแล้ว ไม่สามารถกู้กล่องที่ถูกตัดทิ้งได้ การปรับหน้าจอไม่เรียกโมเดลซ้ำ Slider อัปเดตเมื่อปล่อยเมาส์')
@@ -402,6 +431,7 @@ def detection(kind, environment):
             st.caption('ใช้เฉพาะไฟล์ที่คุณมีสิทธิ์และได้รับความยินยอม ไม่อัปโหลดข้อมูลส่วนบุคคลที่ไม่จำเป็น')
     with right:
         if uploaded is None:
+            clear_concerns(st.session_state, kind)
             st.session_state.pop(CACHE_SLOT, None)
             st.markdown('<div class="empty"><h3>พร้อมเริ่มต้นเมื่อคุณเลือกไฟล์</h3><p>ภาพตัวอย่างและผลการตรวจจับจะแสดงในบริเวณนี้<br>ระบบยังไม่โหลดโมเดลจนกว่าคุณจะเริ่มตรวจจับ</p></div>', unsafe_allow_html=True)
             return
@@ -411,7 +441,9 @@ def detection(kind, environment):
         data = uploaded.getvalue()
         signature = candidate_cache_key(data) if kind == 'image' else (kind, hashlib.sha256(data).hexdigest(), profile)
         if kind == 'image':get_image_cache(st.session_state, signature, time.time())
-        if st.session_state.get('signature') != signature:st.session_state.pop('result', None)
+        if st.session_state.get('signature') != signature:
+            st.session_state.pop('result', None)
+            clear_concerns(st.session_state, kind)
         if kind == 'image':
             try:decode_image(data)
             except AppError as error:st.error(MESSAGES[error.code]);return
@@ -454,6 +486,7 @@ def main():
     environment = mode()
     get_image_cache(st.session_state, now=time.time())
     if time.time()-st.session_state.get('result_time', 0) > LIMITS.result_ttl_seconds:
+        clear_concerns(st.session_state)
         st.session_state.pop('result', None);st.session_state.pop('signature', None)
     with st.sidebar:
         st.markdown('### ◈ วิเคราะห์ผิวด้วย AI')
