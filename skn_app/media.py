@@ -3,6 +3,7 @@ from collections import Counter
 import csv
 import io
 import math
+import struct
 from pathlib import Path
 import time
 
@@ -79,6 +80,42 @@ def video_metadata(path):
         return _video_metadata(path)
 
 
+def video_rotation(frame, metadata=None, fallback=0):
+    """Read a pure quarter-turn; PyAV DISPLAYMATRIX angles are counterclockwise.
+
+    Validate the whole matrix, not only its angle: flips, shear, scale and
+    perspective cannot safely be treated as a rotation. Translation only
+    moves the display origin and is removed when fitting the upright frame.
+    Legacy rotate tags use clockwise degrees; a display matrix takes priority.
+    """
+    matrices = [x for x in frame.side_data if 'DISPLAYMATRIX' in str(x.type).upper()]
+    if len(matrices)>1:raise AppError('VIDEO_ROTATION')
+    if matrices:
+        raw=bytes(matrices[0])
+        if len(raw)!=36:raise AppError('VIDEO_ROTATION')
+        matrix=struct.unpack('=9i',raw)
+        angle=float(frame.rotation)
+    else:
+        tag=(metadata or {}).get('rotate','')
+        try:angle=-float(tag) if tag else float(fallback)
+        except (ValueError,TypeError):raise AppError('VIDEO_ROTATION') from None
+    if not math.isfinite(angle) or abs(angle/90-round(angle/90))>1e-5:
+        raise AppError('VIDEO_ROTATION')
+    rotation=int(round(angle/90)*90)%360
+    if matrices:
+        a,b,c,d={0:(1,0,0,1),90:(0,-1,1,0),180:(-1,0,0,-1),270:(0,1,-1,0)}[rotation]
+        expected={0:a*65536,1:b*65536,2:0,3:c*65536,4:d*65536,5:0,8:1<<30}
+        if any(abs(matrix[i]-value)>2 for i,value in expected.items()):raise AppError('VIDEO_ROTATION')
+    return rotation
+
+
+def upright_video_image(frame, rotation):
+    """Lossless pixel transpose before prediction; no crop, scale or box remap."""
+    image=frame.to_image().convert('RGB')
+    operation={90:Image.Transpose.ROTATE_90,180:Image.Transpose.ROTATE_180,270:Image.Transpose.ROTATE_270}.get(rotation)
+    return image.transpose(operation) if operation is not None else image
+
+
 def _video_metadata(path):
     try:
         import av
@@ -96,10 +133,15 @@ def _video_metadata(path):
                     or min(width, height) <= 0 or width*height > LIMITS.video_pixels
                     or max(width, height) > LIMITS.video_long_side or not 0 < rate <= 60):
                 raise AppError('VIDEO_LIMITS')
-            if stream.metadata.get('rotate', '0') not in ('0', ''):
-                raise AppError('VIDEO_ROTATION')
+            stream.thread_count=1
+            guard_memory(video=True)
+            first=next(quiet_decode(container),None)
+            if first is None or (first.width,first.height)!=(width,height):raise AppError('VIDEO_INVALID')
+            rotation=video_rotation(first,stream.metadata)
+            display_width,display_height=(height,width) if rotation in (90,270) else (width,height)
             av.codec.Codec('libx264', 'w')
-            return dict(width=width, height=height, duration_seconds=duration, source_fps=rate,
+            return dict(width=display_width, height=display_height, source_width=width, source_height=height,
+                rotation_degrees_ccw=rotation, duration_seconds=duration, source_fps=rate,
                 source_codec=stream.codec_context.name, maximum_samples=math.ceil(duration),
                 maximum_decoded_frames=math.ceil(duration*rate*1.5)+8)
     except AppError:
@@ -142,8 +184,9 @@ def process_video(data, runtime, profile, folder, progress=lambda done, total: N
         stream.pix_fmt = 'yuv420p';stream.options = {'preset': 'veryfast', 'crf': '23', 'profile': 'baseline'}
         next_sample, first_time, decoded, last_timestamp = 0., None, 0, -1.
         for frame in quiet_decode(incoming):
-            if any('DISPLAYMATRIX' in str(item.type).upper() for item in frame.side_data):
-                raise AppError('VIDEO_ROTATION')
+            rotation=video_rotation(frame,incoming.streams.video[0].metadata,metadata['rotation_degrees_ccw'])
+            if rotation!=metadata['rotation_degrees_ccw']:raise AppError('VIDEO_ROTATION')
+            if (frame.width,frame.height)!=(metadata['source_width'],metadata['source_height']):raise AppError('VIDEO_INVALID')
             if time.monotonic()-started > LIMITS.job_seconds:
                 raise AppError('JOB_TIMEOUT')
             raw_time = float(frame.time) if frame.time is not None else decoded/metadata['source_fps']
@@ -160,7 +203,7 @@ def process_video(data, runtime, profile, folder, progress=lambda done, total: N
             if timestamp+1e-6 < next_sample:
                 continue
             guard_memory(video=True)
-            image = frame.to_image().convert('RGB')
+            image = upright_video_image(frame,rotation)
             if image.size != (metadata['width'], metadata['height']):
                 raise AppError('VIDEO_INVALID')
             predictions, seconds = runtime.predict(image, profile)

@@ -2,7 +2,7 @@
   ".github/workflows/linux-build.yml": "ecf99968aab24a80c07cd9ed1a9e8ed9518e95e53ddc92e61ded4e8ef09a728d",
   ".gitignore": "8cd6aa1736344758f1bc232bbc93feabab1a45b80af9e49489f954ee82e15495",
   ".streamlit/config.toml": "9c1103d4321a8bf4c01ead529bae6e8aaaa6e92c69d15fe63cb59dcde9367fca",
-  "DEPLOY_STREAMLIT_CLOUD.md": "4472855589318d068208a37f19a808561b9e95f7dc8c627853c9da2489162b2a",
+  "DEPLOY_STREAMLIT_CLOUD.md": "6f5e0c1567778823c2a0b787fd3019cd3d179c91e7d80409b27d304f7f21c687",
   "README.md": "4b846982f482f3bed7ae90684adbcf86d1e0ac5cd02b584df00b3fb88cb3ef9e",
   "SOURCE_PROVENANCE.json": "7fa664b0042f194976a2366e2a80f550fab219b2acf4ce827509f49af491e158",
   "ci/__init__.py": "4b592ac82ab0515d4b78047f4ad68315986dc857422895eacd9333d783ce177b",
@@ -22,12 +22,12 @@
   "skn_app/__init__.py": "85791620d1e68c2a014ac43408442c62f3c16513485cc03697a60313569ae1d6",
   "skn_app/cloud_adapter.py": "0e1e9935e0fdd0e56a7c1ad55312f9db348fe18fcbccd9d0470e2b591b87dd35",
   "skn_app/config.py": "4abaacc951434911fa613827a16db04c4253242187347f0d3f7d49e375f1f509",
-  "skn_app/errors.py": "305cf2762b909ecd80752a2ddec7050e07dd9bb4c15d7d2d933f4e036a395331",
+  "skn_app/errors.py": "b99576e44309f6b01184af31852f8b5dfd528bfab23d8551700a5f40bb2cbaec",
   "skn_app/local_adapter.py": "abf8d04ca4647ff1aebbb6d7c98017b600cac61e54ed39c3c323884b78bde8e3",
-  "skn_app/media.py": "efb641f96581c706bfba388193df9b842c4455869c6c409163cd02fcf04cd737",
+  "skn_app/media.py": "69e8f13c7f75930f249ed701d7992ab0803206dcc212063b1fdb356ddcf246d1",
   "skn_app/presentation.py": "3089475c19bddf17ec45d73b64fba8a16439c8ef2e59834f1a90ca0493100f5e",
   "skn_app/recorder.js": "c341fcd66ea59dc1ea5d550eadeab5a4d53d36f4374ce04c8b170934440c991b",
-  "skn_app/recording_media.py": "9e58169f35ddfd0fe0476c93b7cf9c25cd4f108471a3dc791326f0653646e4e1",
+  "skn_app/recording_media.py": "e404871e0906d42f461e539dcc0efe074abb8b33a4fe870d7a91b9291f10b021",
   "skn_app/resources.py": "78226ad978b103b19d53f4651dee722957d125663b497087e9248ddd9098e12e",
   "skn_app/runtime.py": "42d4f96764c3969ab36ba5489a8b0352d8f23e7d27367505aeca0c7b869589d3",
   "skn_app/secrets.py": "8c90c2c3266e2e627e03af0fa7a3feaf8b220f2ff5234483cb49262d012cac74",
@@ -40,5 +40,5 @@
   "tests/test_interactive.py": "2fa386bd0be450155e2d799d4bd8d6a447525defef17cb6e1835041e16bd1dd8",
   "tests/test_skincare_guidance.py": "c4c33be3a860260b687f0fd1cdba2b06a5d48ca29b1a580b2590a1ed9571fe4c",
   "tests/test_skn_app.py": "0a51996a16731d2059f7307fa701488425fede01e7ce3a8e567dad3afa900797",
-  "tests/test_video_recorder.py": "6d4445ce4ea5ed864bc6d20e939c39fb84e5698fe7ea8c5510f67ad0bbe99cd9"
+  "tests/test_video_recorder.py": "a1d3066e07fae21599e0985861a7be1339eaf635d00f341bbdad152da634e2f8"
 }

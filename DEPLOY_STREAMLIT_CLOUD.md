@@ -269,3 +269,13 @@ Selections อยู่ใน Session แยกตามชนิดและไ
 การทดสอบใช้ Canvas MediaStream และคลิปสังเคราะห์: Chrome MediaRecorder จริงทำ Start/Stop, Preview, Transfer, Auto-stop และ WebM normalization ได้ รวมทั้งจำลอง Permission denial/Unsupported MIME/Blob เกินขนาด. ไม่ใช่การยืนยันกล้องจริง: **Windows Chrome physical camera, Edge, Android Chrome, iPhone Safari และ Cloud recording end-to-end = NOT VERIFIED** จนทดสอบอุปกรณ์จริง. Linux CI จะตรวจ Synthetic tests และ Source audit หลังได้รับอนุญาต Push; รอบพัฒนายังไม่ Deploy.
 
 API อ้างอิง: https://docs.streamlit.io/develop/concepts/custom-components/components-v2/register และ https://docs.streamlit.io/develop/concepts/custom-components/components-v2/communicate .
+
+## แนวภาพวิดีโอจากกล้องและมือถือ
+
+รองรับ Display Matrix แบบหมุน 0°, 90°, 180° และ 270° โดยหมุนพิกเซลให้ตรงก่อนส่งเข้าโมเดล ไม่ครอป ไม่ย่อภาพ และไม่เปลี่ยนเกณฑ์ตรวจจับ: วิดีโออัปโหลดหมุนเฉพาะเฟรมที่สุ่มตรวจ 1 เฟรมต่อวินาที ส่วนวิดีโอจาก Browser ที่มีการหมุนจะปรับแนวเป็น MP4/H.264 ใน Temporary job directory ก่อนเข้า Pipeline เดิม ผลลัพธ์ MP4 และพิกัด CSV อ้างอิงภาพที่ตั้งตรงเดียวกัน ไฟล์ต้นฉบับไม่ถูกแก้ไข
+
+วิดีโอที่ไม่มีการหมุนยังใช้เส้นทางเดิม รักษา Timestamp, Upload/Duration/Resolution limits, Memory guards และ Locks ทั้งหมด การแปลงไฟล์บันทึกอาจเพิ่มเวลาประมวลผลและยังอยู่ภายใต้ Timeout เดิม รูปแบบที่มีการสะท้อนภาพ สเกล บิดเอียง มุมที่ไม่ใช่ทวีคูณ 90° หรือเปลี่ยนแนวระหว่างคลิปยังปฏิเสธอย่างปลอดภัย ไม่ละเลย Metadata แล้ววิเคราะห์ภาพผิดแนว
+
+ทดสอบด้วย MP4 สังเคราะห์ที่มี Display Matrix จริงทั้ง 90°/180°/270° และตรวจพิกเซลที่ส่งให้ Runtime, ขนาดภาพ, 1 FPS, H.264 และ CSV โดยไม่โหลด Weights การทดสอบคลิปจากอุปกรณ์จริงของผู้ใช้บน Cloud ยังเป็น NOT VERIFIED จนกว่าจะทดลองหลังอัปเดต
+
+อ้างอิงความหมายมุมหมุนทวนเข็มนาฬิกาของ PyAV และโครงสร้าง Display Matrix: https://pyav.basswood.io/docs/18.0/api/video.html และ https://www.ffmpeg.org/doxygen/trunk/group__lavu__video__display.html .
