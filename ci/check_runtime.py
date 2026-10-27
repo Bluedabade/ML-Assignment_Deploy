@@ -10,7 +10,8 @@ from .safety import install_guard, forbid_model
 def check():
     install_guard()
     for name in ('skn_app.config', 'skn_app.errors', 'skn_app.resources', 'skn_app.secrets',
-                 'skn_app.media', 'skn_app.runtime', 'skn_app.cloud_adapter', 'skn_app.ui'):
+                 'skn_app.media', 'skn_app.runtime', 'skn_app.cloud_adapter', 'skn_app.ui',
+                 'skn_app.video_recorder', 'skn_app.recording_media'):
         importlib.import_module(name)
     from skn_app import runtime
     runtime.load_official = forbid_model

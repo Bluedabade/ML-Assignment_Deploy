@@ -243,6 +243,42 @@ interactive_image_results(st.session_state[CACHE_SLOT]['key'])
                 raise RuntimeError('INTERACTIVE_RESET_FAILED')
             adapter.assert_not_called()
         check_camera_ui()
+        from skn_app import video_recorder
+        video_source="from skn_app.ui import detection\ndetection('video','cloud')"
+        with patch.object(ui,'service',side_effect=forbid_model) as no_service:
+            record_view=AppTest.from_string(video_source).run()
+            record_view.segmented_control[0].set_value('record').run()
+            if record_view.exception or record_view.get('file_uploader'):
+                raise RuntimeError('RECORDER_COMPONENT_RENDER_FAILED')
+            no_service.assert_not_called()
+        clip=dict(b64='AAAAGGZ0eXBpc29t',mime='video/mp4',seconds=1.)
+        payload=video_recorder.decode_clip(clip)[0]
+        def recorded(key):return (payload,'video/mp4') if key=='video-recorder-1' else None
+        with patch.object(video_recorder,'recorder',side_effect=recorded),patch.object(ui,'service',side_effect=forbid_model) as no_service:
+            gate=AppTest.from_string(video_source).run()
+            gate.segmented_control[0].set_value('record').run()
+            if gate.exception or not next(b for b in gate.button if b.label=='เริ่มวิเคราะห์วิดีโอ').disabled:
+                raise RuntimeError('RECORDER_CLOUD_GATE_REMOVED')
+            next(b for b in gate.button if b.label=='ถ่ายวิดีโอใหม่').click().run()
+            if gate.exception or any(b.label=='เริ่มวิเคราะห์วิดีโอ' for b in gate.button):raise RuntimeError('RECORDER_RETAKE_STALE_MEDIA')
+            gate.segmented_control[0].set_value('upload').run()
+            if gate.exception or not gate.get('file_uploader'):raise RuntimeError('RECORDER_UPLOAD_FALLBACK_FAILED')
+            no_service.assert_not_called()
+        from types import SimpleNamespace
+        video_calls=[]
+        def video_job(data,kind,profile,progress):
+            if data!=payload or kind!='recorded_video':raise RuntimeError('RECORDED_VIDEO_ROUTING_CHANGED')
+            video_calls.append(1)
+            return dict(video_bytes=payload,csv_bytes=b'timestamp_seconds,class_name,confidence,x1,y1,x2,y2\n',
+                counts=dict.fromkeys(THAI,0),predictions=[],frames=[],inference_seconds=0.)
+        with patch.object(video_recorder,'recorder',side_effect=recorded),patch.object(ui,'service',return_value=SimpleNamespace(process_media=video_job)):
+            allowed=AppTest.from_string("import streamlit as st\nst.session_state['image_verified']=True\n"+video_source).run()
+            allowed.segmented_control[0].set_value('record').run()
+            if video_calls:raise RuntimeError('RECORDER_AUTO_PROCESSING')
+            next(b for b in allowed.button if b.label=='เริ่มวิเคราะห์วิดีโอ').click().run()
+            if allowed.exception or len(video_calls)!=1 or len(allowed.metric)!=4:raise RuntimeError('RECORDED_VIDEO_PROCESS_BUTTON_FAILED')
+            allowed.selectbox[0].set_value('Precision-focused').run()
+            if len(video_calls)!=1:raise RuntimeError('RECORDER_DUPLICATE_JOB')
         loader.assert_not_called()
     if any(n == 'inference_models' or n.startswith('inference_models.') for n in sys.modules):
         raise RuntimeError('SDK_IMPORTED_DURING_INITIAL_UI')
@@ -277,6 +313,7 @@ interactive_image_results(st.session_state[CACHE_SLOT]['key'])
             'localhost_health_passed': True, 'sdk_imported': False, 'model_load_calls': 0,
             'guidance_cases_checked': 8, 'enlarged_pore_result_checked': True,
             'interactive_controls_verified': True, 'camera_synthetic_flow_verified': True,
+            'video_recorder_synthetic_ui_verified': True,
             'camera_hardware_verified': False, 'cloud_inference_verified': False}
 
 

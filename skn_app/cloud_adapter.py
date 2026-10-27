@@ -19,9 +19,12 @@ class CloudAdapter:
         try:
             if kind == 'image':
                 result = process_image(data, self.runtime, profile);self.image_verified = True
-            elif kind == 'video':
+            elif kind in ('video','recorded_video'):
                 if not self.image_verified:raise AppError('VIDEO_IMAGE_FIRST')
                 with tempfile.TemporaryDirectory(prefix='skn-job-') as folder:
+                    if kind == 'recorded_video':
+                        from .recording_media import normalize_recording
+                        data=normalize_recording(data,folder)
                     result = process_video(data, self.runtime, profile, folder, progress)
             else:raise AppError('INPUT_INVALID')
             result.update(model_loads=self.runtime.model_loads, model_load_seconds=self.runtime.load_seconds,

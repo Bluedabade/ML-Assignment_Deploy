@@ -128,8 +128,9 @@ def clear_media():
     for key in ('result', 'signature', 'result_time', 'image_verified', CACHE_SLOT):
         st.session_state.pop(key, None)
     st.session_state['upload_generation'] = st.session_state.get('upload_generation', 0)+1
+    st.session_state['video_generation'] = st.session_state.get('video_generation', 0)+1
     for key in list(st.session_state):
-        if key.startswith(('camera-image-', 'upload-image-')):
+        if key.startswith(('camera-image-', 'upload-image-', 'video-recorder-', 'upload-video-')):
             st.session_state.pop(key, None)
 
 
@@ -143,6 +144,26 @@ def change_image_source():
 def choose_upload():
     st.session_state['image_input_source'] = 'upload'
     clear_media()
+
+
+def clear_video_input():
+    for key in ('result','signature','result_time'):
+        st.session_state.pop(key,None)
+    clear_concerns(st.session_state,'video')
+    st.session_state['video_generation']=st.session_state.get('video_generation',0)+1
+    for key in list(st.session_state):
+        if key.startswith(('video-recorder-','upload-video-')):st.session_state.pop(key,None)
+
+
+def change_video_source():
+    if st.session_state.get('video_input_source') not in ('record','upload'):
+        st.session_state['video_input_source']='upload'
+    clear_video_input()
+
+
+def choose_video_upload():
+    st.session_state['video_input_source']='upload'
+    clear_video_input()
 
 
 def display_rows(rows):
@@ -438,10 +459,18 @@ def detection(kind, environment):
         if cached is not None:
             interactive_image_results(cached['key'])
             return
+    else:
+        st.session_state.setdefault('video_input_source','upload')
+        video_labels={'record':'บันทึกวิดีโอด้วยกล้อง','upload':'อัปโหลดวิดีโอ'}
+        source=st.segmented_control('เลือกวิธีนำเข้าวิดีโอ',list(video_labels),
+            format_func=video_labels.get,key='video_input_source',on_change=change_video_source) or 'upload'
+        if source=='record':
+            st.caption('กรุณาอนุญาตให้เว็บไซต์เข้าถึงกล้อง · ไม่บันทึกเสียง · ใช้ HTTPS หรือ localhost')
+            st.button('เลือกอัปโหลดวิดีโอแทน',on_click=choose_video_upload)
     left, right = st.columns([1, 1.6], gap='medium')
     with left:
         with st.container(border=True):
-            st.markdown(('### ถ่ายภาพด้วยกล้อง' if source == 'camera' else '### อัปโหลดรูปภาพ') if kind == 'image' else '### อัปโหลดวิดีโอ')
+            st.markdown(('### ถ่ายภาพด้วยกล้อง' if source == 'camera' else '### อัปโหลดรูปภาพ') if kind == 'image' else ('### บันทึกวิดีโอด้วยกล้อง' if source=='record' else '### อัปโหลดวิดีโอ'))
             st.caption(('JPEG จากกล้อง · ไม่เกิน 5 MiB · ไม่เกิน 4 ล้านพิกเซลโดยประมาณ' if source == 'camera' else 'รองรับ JPG, JPEG และ PNG ขนาดไม่เกิน 5 MB (5 MiB) · ไม่เกิน 4 ล้านพิกเซลโดยประมาณ') if kind == 'image' else
                        'รองรับ MP4 ไม่เกิน 20 MB (20 MiB) · 12 วินาที · ด้านยาวไม่เกิน 1280 พิกเซล · พิกเซลรวมไม่เกิน 1280 × 720')
             if kind == 'video':st.info('วิเคราะห์ตัวอย่าง 1 เฟรมต่อวินาที ไม่ใช่ระบบตรวจจับแบบเรียลไทม์')
@@ -454,8 +483,16 @@ def detection(kind, environment):
                 with st.expander('หากใช้งานกล้องไม่ได้'):
                     st.write('ไม่สามารถเข้าถึงกล้องได้ กรุณาตรวจสอบสิทธิ์การใช้งานกล้องในเบราว์เซอร์ หรือเลือกอัปโหลดภาพแทน')
                     st.caption('ใช้ HTTPS หรือ localhost และตรวจว่าอุปกรณ์มีกล้องที่พร้อมใช้งาน การเลือกกล้องหน้า/หลังขึ้นกับเบราว์เซอร์')
+            elif kind=='video' and source=='record':
+                from .video_recorder import recorder,RecordedClip
+                try:
+                    clip=recorder(f"video-recorder-{st.session_state.get('video_generation',0)}")
+                    uploaded=RecordedClip(*clip) if clip else None
+                except AppError as error:
+                    st.error(MESSAGES[error.code]);uploaded=None
             else:
-                uploaded = st.file_uploader('เลือกไฟล์รูปภาพ' if kind == 'image' else 'เลือกไฟล์วิดีโอ', type=['jpg', 'jpeg', 'png'] if kind == 'image' else ['mp4'], key=f"upload-{kind}-{st.session_state.get('upload_generation',0)}", max_upload_size=(LIMITS.image_bytes if kind == 'image' else LIMITS.video_bytes)//1024**2)
+                generation=st.session_state.get('upload_generation' if kind=='image' else 'video_generation',0)
+                uploaded = st.file_uploader('เลือกไฟล์รูปภาพ' if kind == 'image' else 'เลือกไฟล์วิดีโอ', type=['jpg', 'jpeg', 'png'] if kind == 'image' else ['mp4'], key=f"upload-{kind}-{generation}", max_upload_size=(LIMITS.image_bytes if kind == 'image' else LIMITS.video_bytes)//1024**2)
             profile = 'Balanced'
             if kind == 'video':
                 with st.expander('ตั้งค่าขั้นสูง'):
@@ -466,6 +503,8 @@ def detection(kind, environment):
     with right:
         if uploaded is None:
             clear_concerns(st.session_state, kind)
+            if kind=='video':
+                st.session_state.pop('result',None);st.session_state.pop('signature',None)
             st.session_state.pop(CACHE_SLOT, None)
             st.markdown(('<div class="empty"><h3>พร้อมเริ่มต้นเมื่อคุณถ่ายภาพ</h3><p>อนุญาตกล้องและถ่ายภาพ แล้วกดเริ่มตรวจจับ<br>ระบบยังไม่โหลดโมเดลจนกว่าคุณจะเริ่มตรวจจับ</p></div>' if kind == 'image' and source == 'camera' else '<div class="empty"><h3>พร้อมเริ่มต้นเมื่อคุณเลือกไฟล์</h3><p>ภาพตัวอย่างและผลการตรวจจับจะแสดงในบริเวณนี้<br>ระบบยังไม่โหลดโมเดลจนกว่าคุณจะเริ่มตรวจจับ</p></div>'), unsafe_allow_html=True)
             return
@@ -483,7 +522,12 @@ def detection(kind, environment):
             except AppError as error:st.error(MESSAGES[error.code]);return
             if get_image_cache(st.session_state, signature, time.time()) is None and st.button('ถ่ายภาพใหม่' if source=='camera' else 'เปลี่ยนภาพ'):
                 clear_media();st.rerun()
-        else:st.video(data, format='video/mp4')
+        else:
+            st.video(data, format=uploaded.mime if source=='record' else 'video/mp4')
+            if source=='record':
+                st.button('ถ่ายวิดีโอใหม่',on_click=clear_video_input)
+                st.download_button('ดาวน์โหลดวิดีโอต้นฉบับ',data,
+                    'recording.webm' if uploaded.mime=='video/webm' else 'recording.mp4',uploaded.mime)
         blocked = environment == 'cloud' and kind == 'video' and not st.session_state.get('image_verified')
         if blocked:st.warning(MESSAGES['VIDEO_IMAGE_FIRST'])
         completed = kind=='image' and get_image_cache(st.session_state,signature,time.time()) is not None
@@ -495,7 +539,7 @@ def detection(kind, environment):
             progress = st.progress(0., text='กำลังเตรียมระบบและตรวจสอบไฟล์…')
             try:
                 with st.spinner('ระบบกำลังวิเคราะห์รูปภาพ กรุณารอสักครู่...' if kind == 'image' else 'ระบบกำลังวิเคราะห์วิดีโอ กรุณารอสักครู่...'):
-                    result = service(environment).process_media(data, kind, profile,
+                    result = service(environment).process_media(data, 'recorded_video' if kind=='video' and source=='record' else kind, profile,
                         lambda done,total: progress.progress(min(1.,done/max(total,1)), text=f'กำลังประมวลผลเฟรมที่ {done} จาก {total}'))
                 if kind == 'image':
                     st.session_state[CACHE_SLOT] = make_image_cache(data, result, time.time())

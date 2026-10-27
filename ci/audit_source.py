@@ -28,6 +28,9 @@ skn_app/config.py
 skn_app/errors.py
 skn_app/local_adapter.py
 skn_app/media.py
+skn_app/video_recorder.py
+skn_app/recording_media.py
+skn_app/recorder.js
 skn_app/presentation.py
 skn_app/resources.py
 skn_app/runtime.py
@@ -45,6 +48,7 @@ tests/test_skn_app.py
 tests/test_ci_safety.py
 tests/test_skincare_guidance.py
 tests/test_interactive.py
+tests/test_video_recorder.py
 docs/LICENSING.md
 docs/LICENSE_PERMISSION_REQUEST.md
 '''.split())

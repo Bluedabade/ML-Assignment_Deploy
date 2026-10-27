@@ -256,3 +256,16 @@ Selections อยู่ใน Session แยกตามชนิดและไ
 หากไม่พบกล้องหรือไม่ได้อนุญาต ให้เลือก **เลือกภาพจากอุปกรณ์แทน**. Camera ต้องใช้ HTTPS บน Community Cloud หรือ localhost บนเครื่องทดสอบ. ไม่รับรองการเลือกกล้องหน้า/หลังทุก Browser. ข้อความ Native เช่น “Take Photo” และคำแนะนำสิทธิ์บางส่วนเป็นของ Streamlit และยังเป็นภาษาอังกฤษ; ไม่มี CSS/JavaScript แทนปุ่มเพื่อแปลข้อความ.
 
 ผลทดสอบ: AppTest ตรวจ Widget กล้องแบบไม่มีภาพได้ แต่ไม่มี API สำหรับถ่ายภาพจริง จึง Inject JPEG สังเคราะห์เฉพาะใน Tests เพื่อทดสอบ Pipeline/Retake/Cache/Controls; ไม่ใช่ผลโมเดลจริง. Browser ตรวจหน้ากล้อง/Upload fallback บน Desktop และ Mobile แล้ว. **CAMERA_HARDWARE_NOT_VERIFIED** และ **CLOUD_CAMERA_NOT_VERIFIED** จนกว่าจะทดสอบบนอุปกรณ์จริงหลัง Deploy.
+# บันทึกวิดีโอจาก Browser
+
+หน้าวิดีโอมีโหมด **บันทึกวิดีโอด้วยกล้อง / อัปโหลดวิดีโอ** และสร้างเฉพาะโหมดที่เลือก. ใช้ Streamlit Component v2 กับ `getUserMedia`/`MediaRecorder` แบบไม่มีเสียง ไม่มี CDN, Tracking หรือ Remote inference API. Browser ขอสิทธิ์เมื่อกดเปิดกล้องเท่านั้น ขอขนาดไม่เกิน 1280×720 ที่ 15 FPS และตรวจค่าที่อุปกรณ์ส่งกลับ. MIME เลือกด้วย `MediaRecorder.isTypeSupported`: MP4/H.264 ก่อน แล้ว WebM/VP8 หรือ VP9.
+
+กดเปิดกล้อง → เริ่มบันทึก → หยุดหรือรอหยุดอัตโนมัติ (เผื่อเวลา Encoder เล็กน้อยก่อน 12 วินาที) → ดูตัวอย่าง → **ใช้วิดีโอนี้** เพื่อส่งคลิปไปยัง Streamlit → **เริ่มวิเคราะห์วิดีโอ** เพื่อเริ่ม SKN-1. ดู/ดาวน์โหลดต้นฉบับและถ่ายใหม่ไม่เรียกโมเดล. Client จำกัด 20 MiB และ Backend ตรวจซ้ำทั้งหมด; `image_verified` gate บน Cloud ยังมีผล.
+
+`recorded_video` เป็นชนิดงานภายในสำหรับขั้นตรวจไฟล์ก่อนส่งเข้า `process_video()` เดิม: MP4/H.264 ที่ผ่านตรวจคืน Bytes เดิม; WebM/VP8/VP9 แปลงเป็น MP4/H.264 ใน Temporary job directory. ตรวจ Container/Codec, ไม่รับเสียง, Dimension, Rotation, Timestamp, Duration, Frame count, ขนาดไฟล์ และหน่วยความจำ ระหว่าง Decode; จำกัด Thread และเวลาใน Loop 20 วินาที. ไม่ย่อภาพเพื่อหลบ Limits. รองรับ Timestamp แบบแปรผันโดยรักษา PTS; Output การตรวจจับยังเป็น 1 sampled frame/second ตามเดิม. Native codec call แต่ละครั้งยังขึ้นกับระบบและไม่ใช่ Sandbox แยก process บน Cloud.
+
+เลือกอัปโหลด MP4 จากแอปกล้องแทนได้หากสิทธิ์ กล้อง หรือ Codec ไม่พร้อม. Source switch/Retake/Session reset ล้างไฟล์ใน Session และผลเดิมด้วย Generation key. Component cleanup, `pagehide`, และออกจากหน้าจอหยุด Tracks/Timers และคืน Object URLs; Permission promise ที่จบหลัง Unmount จะหยุด Stream ที่ได้ทันที. คลิปถูกเก็บชั่วคราวใน Browser จนกดยืนยัน และส่งผ่าน Streamlit เท่านั้น ไม่เก็บลง Git/Logs/Database.
+
+การทดสอบใช้ Canvas MediaStream และคลิปสังเคราะห์: Chrome MediaRecorder จริงทำ Start/Stop, Preview, Transfer, Auto-stop และ WebM normalization ได้ รวมทั้งจำลอง Permission denial/Unsupported MIME/Blob เกินขนาด. ไม่ใช่การยืนยันกล้องจริง: **Windows Chrome physical camera, Edge, Android Chrome, iPhone Safari และ Cloud recording end-to-end = NOT VERIFIED** จนทดสอบอุปกรณ์จริง. Linux CI จะตรวจ Synthetic tests และ Source audit หลังได้รับอนุญาต Push; รอบพัฒนายังไม่ Deploy.
+
+API อ้างอิง: https://docs.streamlit.io/develop/concepts/custom-components/components-v2/register และ https://docs.streamlit.io/develop/concepts/custom-components/components-v2/communicate .

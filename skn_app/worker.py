@@ -32,13 +32,16 @@ def main():
                         or not folder.name.startswith('skn-job-') or not folder.is_dir()):
                     raise AppError('INPUT_INVALID')
                 kind, profile = request['kind'], request['profile']
-                if kind not in ('image', 'video'):
+                if kind not in ('image', 'video', 'recorded_video'):
                     raise AppError('INPUT_INVALID')
                 source = folder/'upload.bin'
                 maximum = LIMITS.image_bytes if kind == 'image' else LIMITS.video_bytes
                 if source.is_symlink() or not source.is_file() or source.stat().st_size > maximum:
                     raise AppError('INPUT_INVALID')
                 data = source.read_bytes()
+                if kind == 'recorded_video':
+                    from .recording_media import normalize_recording
+                    data=normalize_recording(data,folder)
                 result = process_image(data, runtime, profile) if kind == 'image' else process_video(
                     data, runtime, profile, folder, lambda done, total: emit(dict(event='progress', job_id=job_id, done=done, total=total)))
                 for key, name in [('image_bytes', 'annotated.png'), ('video_bytes', 'sampled.mp4'), ('csv_bytes', 'detections.csv')]:
