@@ -99,6 +99,26 @@ class AppTests(unittest.TestCase):
         self.assertEqual(Image.open(io.BytesIO(result['image_bytes'])).format,'PNG')
         self.assertIn(b'acne',result['csv_bytes'])
 
+    def test_camera_jpeg_uses_shared_image_pipeline_and_cache(self):
+        from skn_app.presentation import make_image_cache,candidate_cache_key,build_image_result,display_thresholds
+        data=image_bytes('JPEG',(1280,720));runtime=FakeRuntime()
+        with patch('skn_app.media.guard_memory'):
+            result=process_image(data,runtime,'Balanced')
+        cache=make_image_cache(data,result,100)
+        self.assertEqual(cache['key'],candidate_cache_key(data))
+        self.assertIs(cache['original_bytes'],data)
+        for threshold in (.1,.25,.9):
+            view=build_image_result(decode_image(data),cache['candidates'],display_thresholds('Custom',threshold))
+            self.assertEqual(len(view['predictions']),sum(view['counts'].values()))
+        self.assertEqual(runtime.calls,1)
+        self.assertEqual(decode_image(data).mode,'RGB')
+
+    def test_camera_rejects_invalid_and_oversized_input_before_inference(self):
+        for data in (b'\xff\xd8invalid JPEG',b'x'*(LIMITS.image_bytes+1),image_bytes('JPEG',(4097,1))):
+            runtime=FakeRuntime()
+            with self.assertRaises(AppError):process_image(data,runtime,'Balanced')
+            self.assertEqual(runtime.calls,0);self.assertEqual(runtime.loads,0)
+
     def test_secret_environment_wins_even_when_empty(self):
         with patch.dict(os.environ,{'ROBOFLOW_API_KEY':'dummy-process'},clear=True):
             self.assertEqual(authentication('cloud',lambda name:'dummy-secret'),'dummy-process')

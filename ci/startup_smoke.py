@@ -15,6 +15,81 @@ from .safety import install_guard, forbid_model
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def check_camera_ui():
+    """Native empty camera plus injected JPEG for integration, never a hardware claim."""
+    import io
+    from types import SimpleNamespace
+    from PIL import Image
+    import streamlit as st
+    from streamlit.testing.v1 import AppTest
+    from skn_app import ui
+    from skn_app.media import process_image
+    from skn_app.presentation import CACHE_SLOT
+    source="from skn_app.ui import detection\ndetection('image','local')"
+    with patch.object(ui,'service',side_effect=forbid_model) as service:
+        native=AppTest.from_string(source).run()
+        if native.exception or len(native.get('file_uploader'))!=1 or native.get('camera_input'):
+            raise RuntimeError('IMAGE_SOURCE_DEFAULT_FAILED')
+        native.segmented_control[0].set_value('camera').run()
+        if native.exception or len(native.get('camera_input'))!=1 or native.get('file_uploader'):
+            raise RuntimeError('CAMERA_NATIVE_INPUT_MISSING')
+        native.segmented_control[0].set_value('upload').run()
+        if native.exception or native.get('camera_input') or len(native.get('file_uploader'))!=1:
+            raise RuntimeError('CAMERA_UPLOAD_SWITCH_FAILED')
+        service.assert_not_called()
+    output=io.BytesIO();Image.new('RGB',(1280,720),'#aabbcc').save(output,format='JPEG')
+    data=output.getvalue();calls=[];predict_calls=[];camera_keys=[]
+    class Runtime:
+        def load(self):pass
+        def predict_candidates(self,image):
+            predict_calls.append(1)
+            return [dict(class_name='acne',confidence=.8,x1=20.,y1=30.,x2=80.,y2=90.)],.01
+    def process(payload,kind,profile,progress):
+        if payload!=data or kind!='image' or profile!='Balanced':raise RuntimeError('CAMERA_SHARED_PAYLOAD_CHANGED')
+        calls.append(1)
+        return process_image(payload,Runtime(),profile)
+    def camera(*args,**kwargs):
+        camera_keys.append(kwargs['key'])
+        if kwargs.get('resolution')!='720p':raise RuntimeError('CAMERA_RESOLUTION_CHANGED')
+        return SimpleNamespace(size=len(data),getvalue=lambda:data) if kwargs['key']=='camera-image-1' else None
+    with patch.object(st,'camera_input',side_effect=camera),patch.object(ui,'service',return_value=SimpleNamespace(process_media=process)) as service,patch('skn_app.media.guard_memory'):
+        flow=AppTest.from_string(source).run()
+        flow.segmented_control[0].set_value('camera').run()
+        if flow.exception or calls:raise RuntimeError('CAMERA_AUTOMATIC_INFERENCE')
+        next(b for b in flow.button if b.label=='เริ่มตรวจจับปัญหาผิว').click().run()
+        if flow.exception or len(calls)!=1 or len(predict_calls)!=1 or len(flow.metric)!=4:
+            raise RuntimeError('CAMERA_PROCESS_FAILED')
+        flow.multiselect[0].set_value(['wrinkle']).run()
+        flow.slider[0].set_value(90).run()
+        flow.slider[1].set_value(10).run()
+        flow.selectbox[1].set_value('none').run()
+        flow.radio[0].set_value('ภาพต้นฉบับ').run()
+        if flow.exception or len(calls)!=1 or flow.multiselect[0].value!=['wrinkle'] or flow.metric[0].value!='0':
+            raise RuntimeError('CAMERA_CACHED_CONTROLS_FAILED')
+        next(b for b in flow.button if b.label=='ถ่ายภาพใหม่').click().run()
+        if flow.exception or CACHE_SLOT in flow.session_state or 'care-image' in flow.session_state or flow.metric:
+            raise RuntimeError('CAMERA_RETAKE_STALE_RESULT')
+        if len(calls)!=1 or camera_keys[-1]=='camera-image-1':raise RuntimeError('CAMERA_RETAKE_GENERATION_FAILED')
+        next(b for b in flow.button if b.label=='เลือกภาพจากอุปกรณ์แทน').click().run()
+        if flow.exception or flow.session_state['image_input_source']!='upload' or not flow.get('file_uploader'):
+            raise RuntimeError('CAMERA_PERMISSION_FALLBACK_FAILED')
+        service.assert_called_once()
+        # Source switch must invalidate even when the results early-return is active.
+        second=AppTest.from_string(source).run()
+        second.segmented_control[0].set_value('camera').run()
+        next(b for b in second.button if b.label=='เริ่มตรวจจับปัญหาผิว').click().run()
+        if second.exception or CACHE_SLOT not in second.session_state:raise RuntimeError('CAMERA_SECOND_SESSION_FAILED')
+        second.multiselect[0].set_value(['wrinkle']).run()
+        second.segmented_control[0].set_value('upload').run()
+        if second.exception or CACHE_SLOT in second.session_state or 'care-image' in second.session_state or second.metric:
+            raise RuntimeError('CAMERA_SOURCE_SWITCH_STALE_RESULT')
+        second.segmented_control[0].set_value('camera').run()
+        if second.exception or second.metric or any(b.label=='เริ่มตรวจจับปัญหาผิว' for b in second.button):
+            raise RuntimeError('CAMERA_SOURCE_SWITCH_REUSED_PHOTO')
+        if len(calls)!=2 or len(predict_calls)!=2:raise RuntimeError('CAMERA_SOURCE_SWITCH_INFERENCE')
+    return True
+
+
 def check():
     install_guard()
     scratch = ROOT/'.ci_tmp';scratch.mkdir(exist_ok=True);tempfile.tempdir = str(scratch)
@@ -167,6 +242,7 @@ interactive_image_results(st.session_state[CACHE_SLOT]['key'])
             if interactive.exception or interactive.selectbox[0].value != 'Balanced':
                 raise RuntimeError('INTERACTIVE_RESET_FAILED')
             adapter.assert_not_called()
+        check_camera_ui()
         loader.assert_not_called()
     if any(n == 'inference_models' or n.startswith('inference_models.') for n in sys.modules):
         raise RuntimeError('SDK_IMPORTED_DURING_INITIAL_UI')
@@ -200,7 +276,8 @@ interactive_image_results(st.session_state[CACHE_SLOT]['key'])
     return {'status': 'STREAMLIT_STARTUP_PASSED', 'initial_ui_rendered': True, 'thai_pages_checked': 6, 'hero_navigation': True,
             'localhost_health_passed': True, 'sdk_imported': False, 'model_load_calls': 0,
             'guidance_cases_checked': 8, 'enlarged_pore_result_checked': True,
-            'interactive_controls_verified': True, 'cloud_inference_verified': False}
+            'interactive_controls_verified': True, 'camera_synthetic_flow_verified': True,
+            'camera_hardware_verified': False, 'cloud_inference_verified': False}
 
 
 if __name__ == '__main__':

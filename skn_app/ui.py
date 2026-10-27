@@ -81,6 +81,7 @@ button{border-radius:12px!important;transition:box-shadow .15s}button:hover{box-
 [data-testid="stCaptionContainer"] p{color:var(--muted)!important}
 .st-key-interactive-image summary{color:var(--ink);background:var(--surface)}
 .st-key-image-preview img{max-height:480px;object-fit:contain;width:100%;border-radius:14px}
+[data-testid="stCameraInput"] video,[data-testid="stCameraInput"] img{max-height:360px;object-fit:contain;border-radius:14px}
 @media(max-width:900px){.st-key-detection-summary [data-testid="stHorizontalBlock"]{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:640px){.st-key-image-preview img{max-height:360px}}
 @media(max-width:640px){.block-container{padding:1.2rem 1rem}.hero{padding:1.25rem}.card{min-height:unset}h1{font-size:1.65rem!important}}
@@ -127,6 +128,21 @@ def clear_media():
     for key in ('result', 'signature', 'result_time', 'image_verified', CACHE_SLOT):
         st.session_state.pop(key, None)
     st.session_state['upload_generation'] = st.session_state.get('upload_generation', 0)+1
+    for key in list(st.session_state):
+        if key.startswith(('camera-image-', 'upload-image-')):
+            st.session_state.pop(key, None)
+
+
+def change_image_source():
+    # Called after the native source control updates, before rendering either input.
+    if st.session_state.get('image_input_source') not in ('camera', 'upload'):
+        st.session_state['image_input_source'] = 'upload'
+    clear_media()
+
+
+def choose_upload():
+    st.session_state['image_input_source'] = 'upload'
+    clear_media()
 
 
 def display_rows(rows):
@@ -402,14 +418,22 @@ def _interactive_image_results(key):
         st.caption('Candidates ผ่าน NMS และการจำกัดจำนวนแล้ว ไม่สามารถกู้กล่องที่ถูกตัดทิ้งได้ การปรับหน้าจอไม่เรียกโมเดลซ้ำ Slider อัปเดตเมื่อปล่อยเมาส์')
         st.caption('เกณฑ์ความเชื่อมั่นต่ำอาจทำให้แสดงตำแหน่งที่ไม่ถูกต้องจำนวนมาก ผลนี้เหมาะสำหรับการสำรวจการทำงานของโมเดล ไม่ใช่การยืนยันปัญหาผิว')
         st.caption(f"เวลาตรวจจับ {view['inference_seconds']:.2f} วินาที · ข้อความบนภาพใช้ภาษาอังกฤษ พร้อมคำอธิบายสีภาษาไทย")
-    if st.button('ตรวจจับภาพใหม่'):
+    if st.button('ถ่ายภาพใหม่' if st.session_state.get('image_input_source') == 'camera' else 'ตรวจจับภาพใหม่'):
         clear_media();st.rerun(scope='app')
 
 
 def detection(kind, environment):
     st.subheader('ตรวจจับปัญหาผิวจากภาพ' if kind == 'image' else 'ตรวจจับปัญหาผิวจากวิดีโอ')
-    st.caption('อัปโหลดภาพใบหน้าเพื่อให้ระบบตรวจจับลักษณะปัญหาผิว' if kind=='image' else 'อัปโหลดวิดีโอ → เริ่มวิเคราะห์ → ดูผลและดาวน์โหลด')
+    st.caption('ถ่ายภาพหรืออัปโหลดภาพใบหน้าเพื่อให้ระบบตรวจจับลักษณะปัญหาผิว' if kind=='image' else 'อัปโหลดวิดีโอ → เริ่มวิเคราะห์ → ดูผลและดาวน์โหลด')
+    source = 'upload'
     if kind == 'image':
+        st.session_state.setdefault('image_input_source', 'upload')
+        source_labels = {'camera':'ถ่ายภาพด้วยกล้อง', 'upload':'อัปโหลดรูปภาพ'}
+        source = st.segmented_control('เลือกวิธีนำเข้ารูปภาพ', list(source_labels),
+            format_func=source_labels.get, key='image_input_source',
+            on_change=change_image_source) or 'upload'
+        if source == 'camera':
+            st.button('เลือกภาพจากอุปกรณ์แทน', on_click=choose_upload)
         cached = get_image_cache(st.session_state, now=time.time())
         if cached is not None:
             interactive_image_results(cached['key'])
@@ -417,11 +441,21 @@ def detection(kind, environment):
     left, right = st.columns([1, 1.6], gap='medium')
     with left:
         with st.container(border=True):
-            st.markdown('### อัปโหลดรูปภาพ' if kind == 'image' else '### อัปโหลดวิดีโอ')
-            st.caption('รองรับ JPG, JPEG และ PNG ขนาดไม่เกิน 5 MB (5 MiB) · ไม่เกิน 4 ล้านพิกเซลโดยประมาณ' if kind == 'image' else
+            st.markdown(('### ถ่ายภาพด้วยกล้อง' if source == 'camera' else '### อัปโหลดรูปภาพ') if kind == 'image' else '### อัปโหลดวิดีโอ')
+            st.caption(('JPEG จากกล้อง · ไม่เกิน 5 MiB · ไม่เกิน 4 ล้านพิกเซลโดยประมาณ' if source == 'camera' else 'รองรับ JPG, JPEG และ PNG ขนาดไม่เกิน 5 MB (5 MiB) · ไม่เกิน 4 ล้านพิกเซลโดยประมาณ') if kind == 'image' else
                        'รองรับ MP4 ไม่เกิน 20 MB (20 MiB) · 12 วินาที · ด้านยาวไม่เกิน 1280 พิกเซล · พิกเซลรวมไม่เกิน 1280 × 720')
             if kind == 'video':st.info('วิเคราะห์ตัวอย่าง 1 เฟรมต่อวินาที ไม่ใช่ระบบตรวจจับแบบเรียลไทม์')
-            uploaded = st.file_uploader('เลือกไฟล์รูปภาพ' if kind == 'image' else 'เลือกไฟล์วิดีโอ', type=['jpg', 'jpeg', 'png'] if kind == 'image' else ['mp4'], key=f"upload-{kind}-{st.session_state.get('upload_generation',0)}", max_upload_size=(LIMITS.image_bytes if kind == 'image' else LIMITS.video_bytes)//1024**2)
+            if kind == 'image' and source == 'camera':
+                st.caption('กรุณาอนุญาตให้เว็บไซต์เข้าถึงกล้องของคุณ')
+                st.caption('จัดใบหน้าให้อยู่ในบริเวณที่มองเห็นได้ชัด และถ่ายในที่มีแสงเพียงพอ')
+                st.caption('เมื่อถ่ายภาพ ภาพจะส่งไปยังเซิร์ฟเวอร์ Streamlit ชั่วคราวใน Session เพื่อแสดงตัวอย่าง กดปุ่มตรวจจับเพื่อเริ่มวิเคราะห์')
+                uploaded = st.camera_input('ถ่ายภาพด้วยกล้อง', resolution='720p',
+                    key=f"camera-image-{st.session_state.get('upload_generation',0)}")
+                with st.expander('หากใช้งานกล้องไม่ได้'):
+                    st.write('ไม่สามารถเข้าถึงกล้องได้ กรุณาตรวจสอบสิทธิ์การใช้งานกล้องในเบราว์เซอร์ หรือเลือกอัปโหลดภาพแทน')
+                    st.caption('ใช้ HTTPS หรือ localhost และตรวจว่าอุปกรณ์มีกล้องที่พร้อมใช้งาน การเลือกกล้องหน้า/หลังขึ้นกับเบราว์เซอร์')
+            else:
+                uploaded = st.file_uploader('เลือกไฟล์รูปภาพ' if kind == 'image' else 'เลือกไฟล์วิดีโอ', type=['jpg', 'jpeg', 'png'] if kind == 'image' else ['mp4'], key=f"upload-{kind}-{st.session_state.get('upload_generation',0)}", max_upload_size=(LIMITS.image_bytes if kind == 'image' else LIMITS.video_bytes)//1024**2)
             profile = 'Balanced'
             if kind == 'video':
                 with st.expander('ตั้งค่าขั้นสูง'):
@@ -433,7 +467,7 @@ def detection(kind, environment):
         if uploaded is None:
             clear_concerns(st.session_state, kind)
             st.session_state.pop(CACHE_SLOT, None)
-            st.markdown('<div class="empty"><h3>พร้อมเริ่มต้นเมื่อคุณเลือกไฟล์</h3><p>ภาพตัวอย่างและผลการตรวจจับจะแสดงในบริเวณนี้<br>ระบบยังไม่โหลดโมเดลจนกว่าคุณจะเริ่มตรวจจับ</p></div>', unsafe_allow_html=True)
+            st.markdown(('<div class="empty"><h3>พร้อมเริ่มต้นเมื่อคุณถ่ายภาพ</h3><p>อนุญาตกล้องและถ่ายภาพ แล้วกดเริ่มตรวจจับ<br>ระบบยังไม่โหลดโมเดลจนกว่าคุณจะเริ่มตรวจจับ</p></div>' if kind == 'image' and source == 'camera' else '<div class="empty"><h3>พร้อมเริ่มต้นเมื่อคุณเลือกไฟล์</h3><p>ภาพตัวอย่างและผลการตรวจจับจะแสดงในบริเวณนี้<br>ระบบยังไม่โหลดโมเดลจนกว่าคุณจะเริ่มตรวจจับ</p></div>'), unsafe_allow_html=True)
             return
         if uploaded.size > (LIMITS.image_bytes if kind == 'image' else LIMITS.video_bytes):
             if kind == 'image':st.session_state.pop(CACHE_SLOT, None)
@@ -447,14 +481,14 @@ def detection(kind, environment):
         if kind == 'image':
             try:decode_image(data)
             except AppError as error:st.error(MESSAGES[error.code]);return
-            if get_image_cache(st.session_state, signature, time.time()) is None and st.button('เปลี่ยนภาพ'):
+            if get_image_cache(st.session_state, signature, time.time()) is None and st.button('ถ่ายภาพใหม่' if source=='camera' else 'เปลี่ยนภาพ'):
                 clear_media();st.rerun()
         else:st.video(data, format='video/mp4')
         blocked = environment == 'cloud' and kind == 'video' and not st.session_state.get('image_verified')
         if blocked:st.warning(MESSAGES['VIDEO_IMAGE_FIRST'])
         completed = kind=='image' and get_image_cache(st.session_state,signature,time.time()) is not None
         clicked = not completed and st.button('เริ่มตรวจจับปัญหาผิว' if kind == 'image' else 'เริ่มวิเคราะห์วิดีโอ', type='primary', disabled=blocked, width='stretch')
-        if kind == 'image' and not completed:preview_image(decode_image(data), 'ภาพที่เลือก')
+        if kind == 'image' and not completed:preview_image(decode_image(data), 'ภาพที่ถ่ายแล้ว' if source=='camera' else 'ภาพที่เลือก')
         if clicked:
             st.session_state.pop('result', None);st.session_state.pop('signature', None)
             if kind == 'image':st.session_state.pop(CACHE_SLOT, None)

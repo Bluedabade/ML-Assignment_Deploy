@@ -2,7 +2,7 @@
   ".github/workflows/linux-build.yml": "ecf99968aab24a80c07cd9ed1a9e8ed9518e95e53ddc92e61ded4e8ef09a728d",
   ".gitignore": "8cd6aa1736344758f1bc232bbc93feabab1a45b80af9e49489f954ee82e15495",
   ".streamlit/config.toml": "9c1103d4321a8bf4c01ead529bae6e8aaaa6e92c69d15fe63cb59dcde9367fca",
-  "DEPLOY_STREAMLIT_CLOUD.md": "be122f6c96cde6566474e30922290d54d39286a98cb1c79c6cb801956e0f3bcc",
+  "DEPLOY_STREAMLIT_CLOUD.md": "a1f508af6ab8df3985e545d9da3f9ddb2fe5801c8ab6e2432196b592298d9522",
   "README.md": "4b846982f482f3bed7ae90684adbcf86d1e0ac5cd02b584df00b3fb88cb3ef9e",
   "SOURCE_PROVENANCE.json": "7fa664b0042f194976a2366e2a80f550fab219b2acf4ce827509f49af491e158",
   "ci/__init__.py": "4b592ac82ab0515d4b78047f4ad68315986dc857422895eacd9333d783ce177b",
@@ -10,7 +10,7 @@
   "ci/check_runtime.py": "44bceeb3a17a8efd58885babd0de279a6450856bba5a5edec0ad56f1082d67c1",
   "ci/run_synthetic.py": "96ae31a09bfceb41ab78d781fce7c0c92d56d8feaca0563c4f298d9e6c2fe7a8",
   "ci/safety.py": "c3364dc80b6da14e4092b8190d0befc4953dbc6beecc472d3e1e012a6a591ddd",
-  "ci/startup_smoke.py": "9056ddfe965a1a97d4830cd5ce6e856977b9ee7dc39410305c6eca329c65cc72",
+  "ci/startup_smoke.py": "2973ae23d29609177e2ce0402f296f2987cd9169b4a26d81cc79994192968fe5",
   "deployment/.env.example": "be04b498a7b4add9c1e75a1129b6df0cd649c4a6ff685066b3b676534412e9be",
   "deployment/dependency_audit.py": "fd655a60e2b2fddc25c0e52cb7262044ab3b2476ff76e09a67afe944cc89b421",
   "deployment/requirements.txt": "c8291abec1d5b4d583196146bff8d26e9280b38114675b3255fbc08fcff40c7f",
@@ -30,11 +30,11 @@
   "skn_app/runtime.py": "42d4f96764c3969ab36ba5489a8b0352d8f23e7d27367505aeca0c7b869589d3",
   "skn_app/secrets.py": "8c90c2c3266e2e627e03af0fa7a3feaf8b220f2ff5234483cb49262d012cac74",
   "skn_app/skincare_guidance.py": "de83f382f0d2c5ed1edff25f10ad5fd4565a14c14e570c7bad4302d964c56f33",
-  "skn_app/ui.py": "c17773a4d5983d922d3d896ede257fc0625fbfdb25c7545283eb957744c70b6b",
+  "skn_app/ui.py": "ed8febbbb15adde0afffd87b48e5cf6efc9a3431c26f4a1f05590a109b8b293d",
   "skn_app/worker.py": "3ccea8a84c1c92379f8730538eae8b2b324a813496e3822e1a91c8cc856125af",
   "streamlit_app.py": "65b39b420cfecdaa1b5d6cee3f6d2b4bd3855ee1d9b19b29ad01a07681e4255c",
   "tests/test_ci_safety.py": "540211cf04c3839a15673a14f51e397952e78b15374168f470002d3bca24a92b",
   "tests/test_interactive.py": "2fa386bd0be450155e2d799d4bd8d6a447525defef17cb6e1835041e16bd1dd8",
   "tests/test_skincare_guidance.py": "c4c33be3a860260b687f0fd1cdba2b06a5d48ca29b1a580b2590a1ed9571fe4c",
-  "tests/test_skn_app.py": "439df57d33d02158c5aaa50b40a44497399e9d5eaa56c13500b66969edb74d6d"
+  "tests/test_skn_app.py": "bca46f23ed215cbe07a98d72bed26e2b2b4a1da702713aae55162699b88e5984"
 }
