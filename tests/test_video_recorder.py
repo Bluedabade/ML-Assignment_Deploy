@@ -67,12 +67,20 @@ class RecordingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             with self.assertRaises(AppError):normalize_recording(b'x'*(LIMITS.video_bytes+1),t)
 
-    def test_cloud_recording_gate_prevents_model_loading(self):
+    def test_invalid_cloud_recording_rejected_before_model_loading(self):
         from skn_app.cloud_adapter import CloudAdapter
         adapter=CloudAdapter(lambda name:None)
         with patch.object(adapter.runtime,'load') as load:
             with self.assertRaises(AppError) as raised:adapter.process_media(b'fake','recorded_video','Balanced')
-            self.assertEqual(raised.exception.code,'VIDEO_IMAGE_FIRST');load.assert_not_called()
+            self.assertEqual(raised.exception.code,'VIDEO_INVALID');load.assert_not_called()
+
+    def test_cloud_recorded_video_without_previous_image(self):
+        from skn_app.cloud_adapter import CloudAdapter
+        adapter=CloudAdapter(lambda name:None)
+        with patch('skn_app.recording_media.normalize_recording',return_value=b'normalized') as normalizer,patch('skn_app.cloud_adapter.process_video',return_value={}) as process:
+            adapter.process_media(b'recorded','recorded_video','Balanced')
+            normalizer.assert_called_once();process.assert_called_once()
+            self.assertEqual(process.call_args.args[0],b'normalized')
 
     def test_variable_frame_timestamps_survive_webm_conversion(self):
         import av

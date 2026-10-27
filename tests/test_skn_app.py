@@ -157,10 +157,11 @@ class AppTests(unittest.TestCase):
         with patch('skn_app.resources.sys.platform','linux'),patch.object(Path,'read_text',read):
             self.assertEqual(available_memory(),73741824)
 
-    def test_cloud_concurrency_and_image_before_video(self):
+    def test_cloud_concurrency_and_video_without_previous_image(self):
         adapter=CloudAdapter(lambda name:'dummy')
-        with self.assertRaises(AppError) as error:adapter.process_media(b'data','video','Balanced')
-        self.assertEqual(error.exception.code,'VIDEO_IMAGE_FIRST')
+        with patch('skn_app.cloud_adapter.process_video',return_value={}) as video:
+            adapter.process_media(b'data','video','Balanced')
+            video.assert_called_once()
         adapter.lock.acquire()
         try:
             with self.assertRaises(AppError) as error:adapter.process_media(b'data','image','Balanced')
@@ -184,7 +185,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(result['available_bytes'],73741824)
 
     def test_cloud_job_temp_cleanup_on_error(self):
-        adapter=CloudAdapter(lambda name:'dummy');adapter.image_verified=True;folders=[]
+        adapter=CloudAdapter(lambda name:'dummy');folders=[]
         def fail(data,runtime,profile,folder,progress):
             folders.append(Path(folder));(Path(folder)/'private.bin').write_bytes(b'private');raise AppError('VIDEO_INVALID')
         with patch('skn_app.cloud_adapter.process_video',side_effect=fail):

@@ -192,7 +192,7 @@ def home():
     st.subheader('ระบบทำงานอย่างไร')
     for col, number, title, detail in zip(st.columns(3), ('01', '02', '03'), ('อัปโหลดภาพหรือวิดีโอ', 'ระบบประมวลผลด้วยโมเดล AI', 'ดูตำแหน่งและจำนวนที่ตรวจพบ'), ('เลือกไฟล์ที่คุณมีสิทธิ์และได้รับความยินยอม', 'เริ่มวิเคราะห์เมื่อคุณกดปุ่มเท่านั้น', 'อ่านผลและดาวน์โหลดไฟล์สำหรับการสาธิต')):
         with col:st.markdown(f'<div class="card"><span class="badge">ขั้นตอน {number}</span><h3>{title}</h3><p>{detail}</p></div>', unsafe_allow_html=True)
-    st.info('เริ่มต้นด้วยการตรวจจับจากภาพก่อนใช้วิดีโอบนระบบคลาวด์ การเปิดหน้านี้ยังไม่โหลดโมเดล')
+    st.info('เลือกตรวจจับจากภาพหรือวิดีโอได้ทันที การเปิดหน้านี้ยังไม่โหลดโมเดล')
 
 
 def evaluation():
@@ -231,7 +231,7 @@ def help_page():
     with st.expander('ตรวจจับจากภาพ', expanded=True):
         st.markdown('1. ไปที่ **ตรวจจับจากภาพ**\n2. อัปโหลด JPG, JPEG หรือ PNG ไม่เกิน 5 MB (5 MiB) และ 4 ล้านพิกเซลโดยประมาณ\n3. เลือกรูปแบบการคัดกรอง แล้วกด **เริ่มตรวจจับปัญหาผิว**\n4. อ่านผลจากกรอบ สี และตาราง แล้วดาวน์โหลดผลตามต้องการ')
     with st.expander('ตรวจจับจากวิดีโอ', expanded=True):
-        st.markdown('1. บนคลาวด์ ให้ตรวจจับภาพสำเร็จในรอบการใช้งานนี้ก่อน\n2. เลือก MP4 ไม่เกิน 20 MB (20 MiB), 12 วินาที, ด้านยาว 1280 พิกเซล และพิกเซลรวมไม่เกิน 1280 × 720\n3. กด **เริ่มวิเคราะห์วิดีโอ** แล้วรอจนเสร็จ\n4. ดูผลรายเฟรม และดาวน์โหลดวิดีโอตัวอย่างหรือข้อมูล CSV')
+        st.markdown('1. บันทึกวิดีโอด้วยกล้อง หรือเลือก MP4 ไม่เกิน 20 MB (20 MiB), 12 วินาที, ด้านยาว 1280 พิกเซล และพิกเซลรวมไม่เกิน 1280 × 720\n2. กด **เริ่มวิเคราะห์วิดีโอ** แล้วรอจนเสร็จ\n3. ดูผลรายเฟรม และดาวน์โหลดวิดีโอตัวอย่างหรือข้อมูล CSV')
         st.caption('ตรวจตัวอย่าง 1 เฟรมต่อวินาที ไม่ตรวจทุกเฟรม ไม่ใช่ระบบเรียลไทม์ วิดีโอผลลัพธ์ไม่มีเสียง')
     with st.expander('ไม่พบตำแหน่ง หมายความว่าอย่างไร?'):
         st.write('หมายถึงไม่มีผลที่ผ่านเกณฑ์ของโมเดล ไม่ได้หมายความว่าผิวปกติ ลองใช้ภาพชัด แสงสม่ำเสมอ และหลีกเลี่ยงภาพที่มีตัวกรอง')
@@ -528,10 +528,8 @@ def detection(kind, environment):
                 st.button('ถ่ายวิดีโอใหม่',on_click=clear_video_input)
                 st.download_button('ดาวน์โหลดวิดีโอต้นฉบับ',data,
                     'recording.webm' if uploaded.mime=='video/webm' else 'recording.mp4',uploaded.mime)
-        blocked = environment == 'cloud' and kind == 'video' and not st.session_state.get('image_verified')
-        if blocked:st.warning(MESSAGES['VIDEO_IMAGE_FIRST'])
         completed = kind=='image' and get_image_cache(st.session_state,signature,time.time()) is not None
-        clicked = not completed and st.button('เริ่มตรวจจับปัญหาผิว' if kind == 'image' else 'เริ่มวิเคราะห์วิดีโอ', type='primary', disabled=blocked, width='stretch')
+        clicked = not completed and st.button('เริ่มตรวจจับปัญหาผิว' if kind == 'image' else 'เริ่มวิเคราะห์วิดีโอ', type='primary', width='stretch')
         if kind == 'image' and not completed:preview_image(decode_image(data), 'ภาพที่ถ่ายแล้ว' if source=='camera' else 'ภาพที่เลือก')
         if clicked:
             st.session_state.pop('result', None);st.session_state.pop('signature', None)
@@ -545,7 +543,6 @@ def detection(kind, environment):
                     st.session_state[CACHE_SLOT] = make_image_cache(data, result, time.time())
                     st.session_state.update(signature=signature, result_time=time.time())
                 else:st.session_state.update(result=result, signature=signature, result_time=time.time())
-                if kind == 'image':st.session_state['image_verified'] = True
                 progress.progress(1., text='ประมวลผลสำเร็จ')
                 if kind == 'image':st.rerun()
             except AppError as error:progress.empty();st.error(MESSAGES[error.code])

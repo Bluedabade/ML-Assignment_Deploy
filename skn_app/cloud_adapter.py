@@ -11,16 +11,14 @@ class CloudAdapter:
     def __init__(self, secrets_reader):
         self.runtime = ModelRuntime('cloud', lambda: authentication('cloud', secrets_reader))
         self.lock = threading.Lock()
-        self.image_verified = False
 
     def process_media(self, data, kind, profile, progress=lambda done, total: None):
         if not self.lock.acquire(blocking=False):
             raise AppError('BUSY')
         try:
             if kind == 'image':
-                result = process_image(data, self.runtime, profile);self.image_verified = True
+                result = process_image(data, self.runtime, profile)
             elif kind in ('video','recorded_video'):
-                if not self.image_verified:raise AppError('VIDEO_IMAGE_FIRST')
                 with tempfile.TemporaryDirectory(prefix='skn-job-') as folder:
                     if kind == 'recorded_video':
                         from .recording_media import normalize_recording

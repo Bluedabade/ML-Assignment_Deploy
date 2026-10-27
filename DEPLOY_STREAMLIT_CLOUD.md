@@ -105,7 +105,7 @@ Destination ต้องยังไม่มีอยู่และ Parent ต
 5. ใส่ Secrets ด้วย Key จริงใน Cloud UI เท่านั้น เลือก Subdomain ที่ต้องการ แล้ว Deploy ด้วยตนเอง
 6. ตรวจ Build logs เฉพาะผู้ดูแล อย่าคัดลอก Credential/Request URLs มารายงาน หาก Source/native build ล้มเหลวให้หยุด ไม่แก้ด้วย Security flags
 7. เปิด App → อัปโหลดภาพที่ได้รับอนุญาต → ตรวจจับ การโหลดครั้งแรกอาจติดต่อ Roboflow เพื่อ Package metadata/artifacts ภาพส่งเข้า ONNX ใน App runtime ไม่ใช่ Remote image API
-8. ยืนยัน Model load และ Image result จริงก่อนวิดีโอ ตรวจ Bounding boxes,4คลาส, Empty-detection wording และดาวน์โหลด PNG/CSV
+8. ยืนยัน Model load และผลภาพ/วิดีโอจริงแยกกัน ตรวจ Bounding boxes,4คลาส, Empty-detection wording และดาวน์โหลด PNG/CSV; ไม่บังคับลำดับภาพก่อนวิดีโอ
 9. ทดสอบ MP4สั้น2วินาทีก่อน ตรวจ Progress, timestamps0/1, Sampled-frame H.264 playback ใน Browser และดาวน์โหลด MP4/CSV
 10. หาก Memory/Time/Codec ไม่พร้อม ให้รายงาน Cloud Video resource-limited/unsupported ห้ามเรียกว่า Cloud Video verified จาก Local test
 11. ตั้ง Public/Private ใน App sharing ตามสิทธิ์และความเหมาะสม ทดสอบจาก Browser/บัญชีอาจารย์จริง ไม่อนุมาน Visibility จาก Repository visibility เพียงอย่างเดียว [Sharing docs](https://docs.streamlit.io/deploy/streamlit-community-cloud/share-your-app)
@@ -260,7 +260,7 @@ Selections อยู่ใน Session แยกตามชนิดและไ
 
 หน้าวิดีโอมีโหมด **บันทึกวิดีโอด้วยกล้อง / อัปโหลดวิดีโอ** และสร้างเฉพาะโหมดที่เลือก. ใช้ Streamlit Component v2 กับ `getUserMedia`/`MediaRecorder` แบบไม่มีเสียง ไม่มี CDN, Tracking หรือ Remote inference API. Browser ขอสิทธิ์เมื่อกดเปิดกล้องเท่านั้น ขอขนาดไม่เกิน 1280×720 ที่ 15 FPS และตรวจค่าที่อุปกรณ์ส่งกลับ. MIME เลือกด้วย `MediaRecorder.isTypeSupported`: MP4/H.264 ก่อน แล้ว WebM/VP8 หรือ VP9.
 
-กดเปิดกล้อง → เริ่มบันทึก → หยุดหรือรอหยุดอัตโนมัติ (เผื่อเวลา Encoder เล็กน้อยก่อน 12 วินาที) → ดูตัวอย่าง → **ใช้วิดีโอนี้** เพื่อส่งคลิปไปยัง Streamlit → **เริ่มวิเคราะห์วิดีโอ** เพื่อเริ่ม SKN-1. ดู/ดาวน์โหลดต้นฉบับและถ่ายใหม่ไม่เรียกโมเดล. Client จำกัด 20 MiB และ Backend ตรวจซ้ำทั้งหมด; `image_verified` gate บน Cloud ยังมีผล.
+กดเปิดกล้อง → เริ่มบันทึก → หยุดหรือรอหยุดอัตโนมัติ (เผื่อเวลา Encoder เล็กน้อยก่อน 12 วินาที) → ดูตัวอย่าง → **ใช้วิดีโอนี้** เพื่อส่งคลิปไปยัง Streamlit → **เริ่มวิเคราะห์วิดีโอ** เพื่อเริ่ม SKN-1. ดู/ดาวน์โหลดต้นฉบับและถ่ายใหม่ไม่เรียกโมเดล. Client จำกัด 20 MiB และ Backend ตรวจซ้ำทั้งหมด. ผู้ใช้อนุมัติให้วิดีโอเริ่มวิเคราะห์ได้โดยตรงโดยไม่ต้องตรวจจับภาพก่อน ทั้งหน้าเว็บและ Cloud adapter; ข้อจำกัดไฟล์ หน่วยความจำ Timeout และ Concurrency lock คงเดิม.
 
 `recorded_video` เป็นชนิดงานภายในสำหรับขั้นตรวจไฟล์ก่อนส่งเข้า `process_video()` เดิม: MP4/H.264 ที่ผ่านตรวจคืน Bytes เดิม; WebM/VP8/VP9 แปลงเป็น MP4/H.264 ใน Temporary job directory. ตรวจ Container/Codec, ไม่รับเสียง, Dimension, Rotation, Timestamp, Duration, Frame count, ขนาดไฟล์ และหน่วยความจำ ระหว่าง Decode; จำกัด Thread และเวลาใน Loop 20 วินาที. ไม่ย่อภาพเพื่อหลบ Limits. รองรับ Timestamp แบบแปรผันโดยรักษา PTS; Output การตรวจจับยังเป็น 1 sampled frame/second ตามเดิม. Native codec call แต่ละครั้งยังขึ้นกับระบบและไม่ใช่ Sandbox แยก process บน Cloud.
 
